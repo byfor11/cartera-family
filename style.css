@@ -311,3 +311,14 @@ p.big { margin: 4px 0 0; }
 .toggle.sm button { min-height: 36px; min-width: 40px; justify-content: center; padding: 0 10px; font-size: 12.5px; }
 .legend .sh { display: none; }
 @media (max-width: 480px) { .chart-top .legend { font-size: 10.5px; gap: 3px 10px; } .legend em, .legend .lg { display: none; } .legend .sh { display: inline; } }
+
+/* v7: cartera por encima/debajo del capital aportado */
+.chart .area-pos { fill: rgba(16, 185, 129, .28); } .chart .area-neg { fill: rgba(244, 63, 94, .26); }
+.chart .baseline { stroke: #aab2c0; stroke-width: 1.7; stroke-dasharray: 6 4; }
+.chart .pt-tick { fill: #0b0c10; stroke: #aab2c0; stroke-width: 1.8; }
+.gl { display: inline-block; width: 10px; height: 10px; border-radius: 3px; vertical-align: -1px; margin-right: 3px; }
+.gl.pos { background: rgba(16, 185, 129, .55); } .gl.neg { background: rgba(244, 63, 94, .55); margin-left: 4px; }
+.lg-gl { gap: 2px !important; }
+.tip-sub { color: var(--dim); font-size: 10px; white-space: normal; width: 0; min-width: 100%; line-height: 1.4; }
+.twr-note { color: var(--text2); }
+.fine b.pos { color: var(--green-t); } .fine b.neg { color: var(--red-t); }

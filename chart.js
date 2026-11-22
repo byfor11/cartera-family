@@ -32,6 +32,7 @@
     const P = { l: 44, r: has2 ? 40 : 10, t: 14, b: 24 };
     const N = dates.length;
     let [min, max] = range(series, 'y');
+    if (opts.baseline) { min = Math.min(min, opts.areaBase || 0); max = Math.max(max, opts.areaBase || 0); }
     const pad = (max - min) * 0.06 || Math.abs(max) * 0.01 || 0.01; min -= pad; max += pad;
     const ticks = niceTicks(min, max, opts.nTicks || 5); min = Math.min(min, ticks[0]); max = Math.max(max, ticks[ticks.length - 1]);
     const x = (i) => P.l + (N <= 1 ? 0 : (i / (N - 1)) * (W - P.l - P.r));
@@ -67,7 +68,7 @@
       const tx = el('text', { x: x(i), y: H - 6, 'text-anchor': k === 0 ? 'start' : k === nLab - 1 ? 'end' : 'middle', class: 'xl' }, gGrid);
       tx.textContent = F.dateShort(dates[i]);
     }
-    if (opts.zeroLine && min < 0 && max > 0) el('line', { x1: P.l, x2: W - P.r, y1: y(0), y2: y(0), class: 'zero', 'aria-hidden': 'true' }, svg);
+    if (opts.zeroLine && !opts.baseline && min < 0 && max > 0) el('line', { x1: P.l, x2: W - P.r, y1: y(0), y2: y(0), class: 'zero', 'aria-hidden': 'true' }, svg);
     // Series secundarias primero (debajo), la principal encima
     const order = series.map((s, k) => k).sort((a, b) => (series[a].axis === 'y2' ? 0 : 1) - (series[b].axis === 'y2' ? 0 : 1));
     order.forEach((k) => {
@@ -79,10 +80,23 @@
         d += (started ? 'L' : 'M') + x(i).toFixed(1) + ' ' + yy(v).toFixed(1); started = true; prevY = yy(v); if (first == null) first = i; last = i;
       });
       const baseY = opts.areaBase != null ? Math.min(H - P.b, Math.max(P.t, y(opts.areaBase))) : H - P.b;
-      if (s.area && first != null) el('path', { d: d + `L${x(last)} ${baseY}L${x(first)} ${baseY}Z`, fill: `url(#${gid})`, 'aria-hidden': 'true' }, svg);
+      if (s.gainLoss && first != null) {
+        // Relleno verde por encima de la base (ganancia) y rojo por debajo (pérdida)
+        const area = d + `L${x(last)} ${baseY}L${x(first)} ${baseY}Z`;
+        const cu = gid + 'u', cd = gid + 'd';
+        el('rect', { x: 0, y: 0, width: W, height: baseY }, el('clipPath', { id: cu }, defs));
+        el('rect', { x: 0, y: baseY, width: W, height: H - baseY }, el('clipPath', { id: cd }, defs));
+        el('path', { d: area, class: 'area-pos', 'clip-path': `url(#${cu})`, 'aria-hidden': 'true' }, svg);
+        el('path', { d: area, class: 'area-neg', 'clip-path': `url(#${cd})`, 'aria-hidden': 'true' }, svg);
+        if (opts.baseline) el('line', { x1: P.l, x2: W - P.r, y1: baseY, y2: baseY, class: 'baseline', 'aria-hidden': 'true' }, svg);
+      } else if (s.area && first != null) el('path', { d: d + `L${x(last)} ${baseY}L${x(first)} ${baseY}Z`, fill: `url(#${gid})`, 'aria-hidden': 'true' }, svg);
       el('path', { d, class: 'line ' + (s.cls || ''), 'aria-hidden': 'true' }, svg);
       if (s.endDot && last != null) el('circle', { cx: x(last), cy: yy(s.values[last]), r: 4.5, class: 'enddot ' + (s.endCls || ''), 'aria-hidden': 'true' }, svg);
     });
+    if (opts.baseline && opts.baseline.label) {
+      const by = y(opts.areaBase || 0), up = by - P.t > 20;
+      const t = el('text', { x: W - P.r - 2, y: up ? by - 5 : by + 13, 'text-anchor': 'end', class: 'base-l', 'aria-hidden': 'true' }, svg); t.textContent = opts.baseline.label;
+    }
     // Puntos con etiqueta (p. ej. inicio en cada plataforma, sobre la línea de capital aportado)
     const gPts = el('g', { class: 'points', 'aria-hidden': 'true' }, svg);
     const mainPts = series.filter((s) => s.axis !== 'y2').flatMap((s) => s.values.map((v, i) => (v == null ? null : [x(i), y(v)])).filter(Boolean));
@@ -90,6 +104,7 @@
     (opts.points || []).forEach((m) => {
       if (m.i < 0 || m.i >= N) return;
       const px = x(m.i), py = (m.axis === 'y2' ? y2 : y)(m.v);
+      if (!m.label) { el('circle', { cx: px, cy: py, r: 3, class: 'pt-tick' }, gPts); return; }
       const g = el('g', { class: 'pt ' + (m.cls || '') }, gPts);
       const bg = el('rect', { rx: 6, class: 'pt-bg' }, g);
       el('circle', { cx: px, cy: py, r: 5.5, class: 'pt-dot' }, g);
