@@ -173,7 +173,7 @@ main { padding-top: 22px; padding-bottom: calc(28px + env(safe-area-inset-bottom
 .search input::placeholder { color: #8b93a3; }
 .search input:focus, .filters select:focus { border-color: var(--blue); outline: none; box-shadow: 0 0 0 2px rgba(59,130,246,.3); }
 .table-scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; scrollbar-width: thin; scrollbar-color: #2563eb #0b0c10; }
-.ftable { width: 100%; border-collapse: separate; border-spacing: 0; min-width: 980px; font-size: 12.5px; }
+.ftable { width: 100%; border-collapse: separate; border-spacing: 0; min-width: 1100px; font-size: 12.5px; }
 .ftable th, .ftable td { padding: 12px 12px; border-bottom: 1px solid #161b26; text-align: right; white-space: nowrap; background: var(--panel); }
 .ftable thead th { font: 600 10px var(--mono); letter-spacing: .12em; text-transform: uppercase; color: var(--dim); background: #0a0c12; padding-top: 14px; padding-bottom: 14px; }
 .ftable thead th button { background: none; border: 0; padding: 0; min-height: 30px; font: inherit; letter-spacing: inherit; text-transform: inherit; color: var(--blue-t); cursor: pointer; }
@@ -299,3 +299,12 @@ p.big { margin: 4px 0 0; }
 .tip-sub { color: var(--dim); font-size: 10px; white-space: normal; width: 0; min-width: 100%; line-height: 1.4; }
 .twr-note { color: var(--text2); }
 .fine b.pos { color: var(--green-t); } .fine b.neg { color: var(--red-t); }
+
+/* v9: € desde compra */
+.ftable td.eurc { font-weight: 600; }
+.ftable tfoot td.eurc { font-size: 13px; }
+@media (max-width: 480px) {
+  .ftable th, .ftable td { padding-left: 8px; padding-right: 8px; }
+  .ftable .first { min-width: 138px; max-width: 150px; }
+  .ftable .first .nm { font-size: 12px; }
+}

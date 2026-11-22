@@ -254,18 +254,20 @@
         <div class="filters"><label class="search"><span class="sr-only">Buscar fondo, ISIN o plataforma</span>${ICON.search}<input id="q" type="search" placeholder="Buscar fondo o ISIN…" autocomplete="off" value="${esc(state.q)}"></label>
         <label><span class="sr-only">Filtrar por tipo</span><select id="tipo"><option value="">Todos los tipos</option>${tipos.map((t) => `<option value="${esc(t)}">${esc(t)}</option>`).join('')}</select></label></div></div>
       <div class="table-scroll" role="region" aria-label="Tabla de fondos, desliza en horizontal" tabindex="0" id="ftable"></div>
-      <div class="pos-foot"><p class="fine"><span class="mark">†</span> Participaciones estimadas (aportado / VL de compra). <span class="mark">‡</span> Fecha de compra aproximada, deducida por VL. «Desde compra» = valor − invertido de cada fondo (antes de la custodia externa). «Diario» = variación del último día del histórico (${F.date(d.fecha_datos)}). Tendencia: VL desde la compra.</p></div>
+      <div class="pos-foot"><p class="fine"><span class="mark">†</span> Participaciones estimadas (aportado / VL de compra). <span class="mark">‡</span> Fecha de compra aproximada, deducida por VL. «Desde compra» y «€ desde compra» = valor − invertido de cada fondo (antes de la custodia externa); el total es valor − aportado de toda la cartera, el mismo importe del gráfico. «Diario» = variación del último día del histórico (${F.date(d.fecha_datos)}). Tendencia: VL desde la compra.</p></div>
     </section>`;
   }
   function drawTable() {
     const d = state.data, q = state.q.trim().toLowerCase();
-    const key = { valor: 'valor', peso: 'valor', diario: 'diario', compra: 'plp' }[state.sort];
+    const key = { valor: 'valor', peso: 'valor', diario: 'diario', compra: 'plp', eur: 'pl' }[state.sort];
     const list = d.posiciones.filter((p) => (!state.tipo || p.tipo === state.tipo) && (!q || [p.nombre, p.isin, p.plataforma, p.tipo].join(' ').toLowerCase().includes(q)))
       .sort((a, b) => (b[key] ?? -1e9) - (a[key] ?? -1e9));
     const th = (k, t) => `<th scope="col" ${state.sort === k ? 'aria-sort="descending"' : ''}><button type="button" data-sort="${k}">${t}${state.sort === k ? ' <span aria-hidden="true">▼</span>' : ''}</button></th>`;
     const tot = list.reduce((a, p) => a + p.valor, 0), totW = list.reduce((a, p) => a + p.peso, 0);
+    // Suma en céntimos (sin errores de coma flotante): con todas las filas = valor − aportado de la cartera
+    const totPl = list.reduce((a, p) => a + Math.round(p.pl * 100), 0) / 100, totInv = list.reduce((a, p) => a + p.invertido, 0);
     $('#ftable').innerHTML = `<table class="ftable"><caption class="sr-only">Posiciones activas a ${F.date(d.fecha_datos)}</caption>
-      <thead><tr><th scope="col" class="first">Fondo / posición</th><th scope="col" class="l">Tipo</th><th scope="col">Cantidad</th><th scope="col">Precio actual</th>${th('valor', 'Valor en EUR')}${th('diario', 'Diario')}${th('compra', 'Desde compra')}${th('peso', 'Peso %')}<th scope="col">Tendencia</th></tr></thead>
+      <thead><tr><th scope="col" class="first">Fondo / posición</th><th scope="col" class="l">Tipo</th><th scope="col">Cantidad</th><th scope="col">Precio actual</th>${th('valor', 'Valor en EUR')}${th('diario', 'Diario')}${th('compra', 'Desde compra')}${th('eur', '€ desde compra')}${th('peso', 'Peso %')}<th scope="col">Tendencia</th></tr></thead>
       <tbody>${list.length ? list.map((p) => `<tr data-test="pos-${esc(p.id)}">
         <th scope="row" class="first"><button type="button" class="fname" data-pos="${esc(p.id)}" aria-label="${esc(p.nombre)}: ver detalle"><span class="nm">${esc(p.nombre)}</span>${marks(p)}<small>${p.isin ? esc(p.isin) + ' · ' : ''}${esc(p.plataforma)}</small></button></th>
         <td class="l"><span class="pill k-${tk(p.tipo)}">${esc(p.tipo)}</span></td>
@@ -274,9 +276,10 @@
         <td class="val">${F.eur(p.valor)}</td>
         <td>${signed(p.diario, (x) => F.pctSigned(x))}</td>
         <td>${signed(p.plp, (x) => F.pctSigned(x))}</td>
+        <td class="eurc" data-test="pl-eur">${signed(p.pl, (x) => F.eurSigned(x))}</td>
         <td class="wt" data-test="peso">${F.pct(p.peso)}</td>
-        <td>${sparkSvg(p.spark)}</td></tr>`).join('') : '<tr class="empty-row"><td colspan="9">Ningún fondo coincide con la búsqueda.</td></tr>'}</tbody>
-      <tfoot><tr><th scope="row" class="first">Total ${list.length < d.posiciones.length ? '(filtrado)' : ''}</th><td></td><td></td><td></td><td>${F.eur(tot)}</td><td></td><td></td><td>${F.pct(totW)}</td><td></td></tr></tfoot></table>`;
+        <td>${sparkSvg(p.spark)}</td></tr>`).join('') : '<tr class="empty-row"><td colspan="10">Ningún fondo coincide con la búsqueda.</td></tr>'}</tbody>
+      <tfoot><tr><th scope="row" class="first">Total ${list.length < d.posiciones.length ? '(filtrado)' : ''}</th><td></td><td></td><td></td><td>${F.eur(tot)}</td><td></td><td data-test="total-plp">${totInv ? signed(totPl / totInv, (x) => F.pctSigned(x)) : ''}</td><td class="eurc" data-test="total-pl-eur">${signed(totPl, (x) => F.eurSigned(x))}</td><td>${F.pct(totW)}</td><td></td></tr></tfoot></table>`;
   }
   function label(k) { const s = k.replace(/_/g, ' '); return s.charAt(0).toUpperCase() + s.slice(1); }
   function openSheet(id) {
