@@ -313,3 +313,8 @@ p.big { margin: 4px 0 0; }
 .kpi-rows .kpi-note { margin-top: -2px; }
 .kpi-rows .kpi-note span { font-size: 10.5px; color: var(--dim); }
 .kpi-rows [data-test^="aport-"] b { color: var(--text); font-weight: 600; }
+
+/* v11: cantidad comprada y NAV */
+.ftable thead th .thsub { display: block; font: 400 9px var(--mono); letter-spacing: .04em; text-transform: none; color: var(--dim); margin-top: 3px; }
+.ftable td .navd { display: block; font-size: 9.5px; color: var(--amber-t); margin-top: 2px; }
+.ftable thead th.wrap { white-space: normal; min-width: 92px; line-height: 1.35; }

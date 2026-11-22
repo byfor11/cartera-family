@@ -238,6 +238,8 @@
   }
 
   /* ---------- Posiciones ---------- */
+  /* Número con todos los decimales que trae el dato (mín. 2, máx. 6), sin ceros sobrantes */
+  function exact(x) { const t = (+x.toFixed(6)).toString(); const dec = Math.min(6, Math.max(2, (t.split('.')[1] || '').length)); return F.num(x, dec); }
   function marks(p) { return (p.estimado ? '<sup class="mark" title="Participaciones estimadas">†</sup>' : '') + (p.fecha_aprox ? '<sup class="mark" title="Fecha de compra aproximada">‡</sup>' : ''); }
   function sparkSvg(vals, w = 84, h = 26) {
     if (!vals || vals.length < 2) return `<svg class="spark" width="${w}" height="${h}" aria-hidden="true"><line x1="2" x2="${w - 2}" y1="${h / 2}" y2="${h / 2}" stroke="#10b981" stroke-width="1.6"/></svg>`;
@@ -255,7 +257,7 @@
         <div class="filters"><label class="search"><span class="sr-only">Buscar fondo, ISIN o plataforma</span>${ICON.search}<input id="q" type="search" placeholder="Buscar fondo o ISIN…" autocomplete="off" value="${esc(state.q)}"></label>
         <label><span class="sr-only">Filtrar por tipo</span><select id="tipo"><option value="">Todos los tipos</option>${tipos.map((t) => `<option value="${esc(t)}">${esc(t)}</option>`).join('')}</select></label></div></div>
       <div class="table-scroll" role="region" aria-label="Tabla de fondos, desliza en horizontal" tabindex="0" id="ftable"></div>
-      <div class="pos-foot"><p class="fine"><span class="mark">†</span> Participaciones estimadas (aportado / VL de compra). <span class="mark">‡</span> Fecha de compra aproximada, deducida por VL. «Desde compra» y «€ desde compra» = valor − invertido de cada fondo (antes de la custodia externa); el total es valor − aportado de toda la cartera, el mismo importe del gráfico. «Diario» = variación del último día del histórico (${F.date(d.fecha_datos)}). Tendencia: VL desde la compra.</p></div>
+      <div class="pos-foot"><p class="fine">«Cantidad comprada» = participaciones compradas (no ha habido ventas, así que son las que se tienen hoy). «Precio actual (NAV)» = valor liquidativo por participación a ${F.date(d.fecha_datos)}; si es de otra fecha se indica debajo. Valor = cantidad × NAV. <span class="mark">†</span> Participaciones estimadas (aportado / NAV de compra). <span class="mark">‡</span> Fecha de compra aproximada, deducida por VL. «Desde compra» y «€ desde compra» = valor − invertido de cada fondo (antes de la custodia externa); el total es valor − aportado de toda la cartera, el mismo importe del gráfico. «Diario» = variación del último día del histórico (${F.date(d.fecha_datos)}). Tendencia: NAV desde la compra.</p></div>
     </section>`;
   }
   function drawTable() {
@@ -268,12 +270,12 @@
     // Suma en céntimos (sin errores de coma flotante): con todas las filas = valor − aportado de la cartera
     const totPl = list.reduce((a, p) => a + Math.round(p.pl * 100), 0) / 100, totInv = list.reduce((a, p) => a + p.invertido, 0);
     $('#ftable').innerHTML = `<table class="ftable"><caption class="sr-only">Posiciones activas a ${F.date(d.fecha_datos)}</caption>
-      <thead><tr><th scope="col" class="first">Fondo / posición</th><th scope="col" class="l">Tipo</th><th scope="col">Cantidad</th><th scope="col">Precio actual</th>${th('valor', 'Valor en EUR')}${th('diario', 'Diario')}${th('compra', 'Desde compra')}${th('eur', '€ desde compra')}${th('peso', 'Peso %')}<th scope="col">Tendencia</th></tr></thead>
+      <thead><tr><th scope="col" class="first">Fondo / posición</th><th scope="col" class="l">Tipo</th><th scope="col" class="wrap">Cantidad comprada<small class="thsub">participaciones</small></th><th scope="col" class="wrap">Precio actual (NAV)<small class="thsub">por participación</small></th>${th('valor', 'Valor en EUR')}${th('diario', 'Diario')}${th('compra', 'Desde compra')}${th('eur', '€ desde compra')}${th('peso', 'Peso %')}<th scope="col">Tendencia</th></tr></thead>
       <tbody>${list.length ? list.map((p) => `<tr data-test="pos-${esc(p.id)}">
         <th scope="row" class="first"><button type="button" class="fname" data-pos="${esc(p.id)}" aria-label="${esc(p.nombre)}: ver detalle"><span class="nm">${esc(p.nombre)}</span>${marks(p)}<small>${p.isin ? esc(p.isin) + ' · ' : ''}${esc(p.plataforma)}</small></button></th>
         <td class="l"><span class="pill k-${tk(p.tipo)}">${esc(p.tipo)}</span></td>
-        <td>${p.participaciones == null ? '—' : F.num(p.participaciones, p.participaciones < 100 ? 4 : 2)}${p.estimado ? '<span class="mark" aria-label="estimadas">†</span>' : ''}</td>
-        <td>${p.vl == null ? '—' : F.eur(p.vl, p.vl < 100 ? 4 : 2)}</td>
+        <td data-test="cantidad">${p.participaciones == null ? '—' : exact(p.participaciones)}${p.estimado ? '<span class="mark" aria-label="estimadas">†</span>' : ''}</td>
+        <td data-test="nav" title="${p.vl == null ? '' : 'NAV del ' + F.date(p.fecha_vl)}">${p.vl == null ? '—' : exact(p.vl) + '\u00a0€'}${p.vl != null && p.fecha_vl !== state.data.fecha_datos ? `<small class="navd">${F.date(p.fecha_vl).slice(0, 5)}</small>` : ''}</td>
         <td class="val">${F.eur(p.valor)}</td>
         <td>${signed(p.diario, (x) => F.pctSigned(x))}</td>
         <td>${signed(p.plp, (x) => F.pctSigned(x))}</td>
@@ -288,9 +290,9 @@
     const extra = [];
     extra.push(['Tipo', p.tipo]); extra.push(['Plataforma', p.plataforma]);
     if (p.isin) extra.push(['ISIN', p.isin + (p.codigo_dgs && p.codigo_dgs === p.isin ? ' (código DGS)' : '')]);
-    if (p.participaciones != null) extra.push(['Participaciones', F.num(p.participaciones, 4) + (p.estimado ? ' †' : '')]);
-    if (p.vl != null) extra.push(['VL actual', F.eur(p.vl, 4) + ' · ' + F.date(p.fecha_vl)]);
-    if (p.vl_compra != null) extra.push(['VL de compra', F.eur(p.vl_compra, 4)]);
+    if (p.participaciones != null) extra.push(['Cantidad comprada', exact(p.participaciones) + ' participaciones' + (p.estimado ? ' †' : '') + ' (sin ventas: es la que se tiene hoy)']);
+    if (p.vl != null) extra.push(['Precio actual (NAV)', exact(p.vl) + '\u00a0€ por participación · ' + F.date(p.fecha_vl) + (p.fecha_vl !== state.data.fecha_datos ? ' (un día por delante del resto)' : '')]);
+    if (p.vl_compra != null) extra.push(['NAV medio de compra', exact(p.vl_compra) + '\u00a0€']);
     extra.push(['Invertido', F.eur(p.invertido)]);
     if (p.fecha_compra) extra.push(['Fecha de compra', F.date(p.fecha_compra) + (p.fecha_aprox ? ' ‡' : '') + (p.confianza ? ` (confianza ${p.confianza})` : '')]);
     if (p.fecha_compra_nota) extra.push(['Nota de compra', p.fecha_compra_nota]);
