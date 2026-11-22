@@ -282,8 +282,32 @@ p.big { margin: 4px 0 0; }
 .chart .marker line { stroke: rgba(16, 185, 129, .55); stroke-width: 1; stroke-dasharray: 2 3; }
 .chart .marker text { fill: #6ee7b7; font: 600 9.5px var(--mono); }
 .chart .enddot.neg { fill: var(--red); } .chart .enddot.pos { fill: var(--green); }
-.modes { display: inline-flex; gap: 4px; padding: 4px; background: #111319; border: 1px solid rgba(59,130,246,.3); border-radius: 14px; flex-wrap: wrap; }
-.modes button { min-height: 44px; padding: 0 12px; border-radius: 11px; border: 1px solid transparent; background: transparent; color: var(--text2); font: 600 12px var(--mono); cursor: pointer; }
-.modes button[aria-pressed="true"] { background: var(--blue-bg); color: var(--blue-t2); border-color: var(--blue); }
-.chart-head { display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 8px; }
 .ovl[hidden] { display: none; }
+
+/* v6: rentabilidad + capital aportado (eje dcho.) + inicio por plataforma */
+.chart-top { display: flex; justify-content: space-between; align-items: center; gap: 8px 10px; flex-wrap: wrap; }
+.chart-top { flex-wrap: nowrap; align-items: flex-start; }
+.chart-top .legend { gap: 4px 12px; flex: 1 1 auto; min-width: 0; padding-top: 2px; }
+.chart-top .ovl { flex: none; }
+.legend em { font-style: normal; color: var(--dim); font-size: 10px; }
+.chart-top .ovl { min-height: 36px; padding: 0 11px; font-size: 11px; }
+.ptsw { display: inline-block; width: 9px; height: 9px; border-radius: 50%; background: #0b0c10; border: 2.5px solid #34d399; box-sizing: content-box; }
+.chart .line.inv { stroke: #aab2c0; stroke-width: 1.7; stroke-dasharray: 5 4; opacity: .85; }
+.chart .grid.y2 text { fill: #8f97a6; }
+.chart .points .pt-dot { fill: #0b0c10; stroke: #34d399; stroke-width: 2.6; }
+.chart .points .pt-bg { fill: rgba(11, 14, 22, .92); stroke: rgba(52, 211, 153, .45); stroke-width: 1; }
+.chart .points .pt-l1 { fill: #6ee7b7; font: 700 10px var(--mono); }
+.chart .points .pt-l2 { fill: var(--text2); font: 600 10px var(--mono); }
+.chart .dot.inv { stroke: #aab2c0; }
+.lsw.inv { border-top: 2px dashed #aab2c0; }
+.lsw.gain, .lsw.val { border-top-color: transparent; }
+.tip { gap: 3px; }
+.tip b.pos { color: var(--green-t); } .tip b.neg { color: var(--red-t); }
+.tip-ini { color: #6ee7b7; border-top: 1px solid #1f2633; padding-top: 4px; margin-top: 2px; display: block; }
+.tip-ini .ptsw { margin-right: 6px; vertical-align: -1px; width: 7px; height: 7px; }
+.tip .tip-aprox { color: var(--dim); font-weight: 400; font-size: 10px; }
+.cal-top { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin: 2px 0 8px; flex-wrap: wrap; }
+.toggle.sm { padding: 3px; gap: 4px; }
+.toggle.sm button { min-height: 36px; min-width: 40px; justify-content: center; padding: 0 10px; font-size: 12.5px; }
+.legend .sh { display: none; }
+@media (max-width: 480px) { .chart-top .legend { font-size: 10.5px; gap: 3px 10px; } .legend em, .legend .lg { display: none; } .legend .sh { display: inline; } }

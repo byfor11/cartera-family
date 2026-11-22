@@ -4,7 +4,7 @@
   const $ = (s, r = document) => r.querySelector(s);
   const $$ = (s, r = document) => [...r.querySelectorAll(s)];
   const esc = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
-  const state = { data: null, view: 'graph', mode: 'pct', period: 'all', ovl: { inv: false, bench: false }, month: null, sort: 'valor', q: '', tipo: '', tm: 'tipo', tmColor: 'compra' };
+  const state = { data: null, view: 'graph', calUnit: 'pct', period: 'all', ovl: { bench: false }, month: null, sort: 'valor', q: '', tipo: '', tm: 'tipo', tmColor: 'compra' };
   const TIPO_K = { 'Renta Variable': 'rv', 'Renta Variable (indexado)': 'rv', 'Renta Fija': 'rf', 'Monetario': 'mon', 'Retorno Absoluto': 'ra', 'Plan de pensiones': 'pp', 'Liquidez': 'liq' };
   const K_COLOR = { rv: '#3b82f6', rf: '#10b981', mon: '#f59e0b', ra: '#8b5cf6', pp: '#0ea5e9', liq: '#9ca3af' };
   const tk = (t) => TIPO_K[t] || 'liq';
@@ -42,15 +42,16 @@
   function addMonths(iso, n) { const d = new Date(iso + 'T12:00:00Z'); d.setUTCMonth(d.getUTCMonth() + n); return d.toISOString().slice(0, 10); }
   function periods(d) {
     const s = d.serie, L = s.length - 1, last = s[L].f;
-    const baseIdx = (target) => { let k = 0; for (let i = 0; i <= L; i++) if (s[i].f <= target) k = i; return k; };
+    const baseIdx = (target) => { let k = -1; for (let i = 0; i <= L; i++) if (s[i].f <= target) k = i; return k; };
+    const jan1 = last.slice(0, 4) + '-01-01', ytdBase = s[0].f >= jan1 ? -1 : baseIdx(addDays(jan1, -1));
     const defs = [
       { id: '1d', label: '1 día', note: 'último día', base: L - 1 },
-      { id: '1w', label: '1 sem.', note: 'última semana', base: baseIdx(addDays(last, -7)) },
-      { id: '1m', label: '1 mes', note: 'último mes', base: baseIdx(addMonths(last, -1)) },
-      { id: '3m', label: '3 meses', note: 'últimos 3 meses', base: baseIdx(addMonths(last, -3)) },
-      { id: 'all', label: '<span class="lg">Desde inicio</span><span class="sh">Inicio</span>', note: 'desde el ' + F.date(s[0].f), base: 0 },
+      { id: '1w', label: '1 sem.', note: 'última semana', base: Math.max(0, baseIdx(addDays(last, -7))) },
+      { id: '1m', label: '1 mes', note: 'último mes', base: Math.max(0, baseIdx(addMonths(last, -1))) },
+      { id: 'ytd', label: 'YTD', note: ytdBase < 0 ? `en ${last.slice(0, 4)} (desde el inicio, ${F.date(s[0].f)})` : `en ${last.slice(0, 4)} (desde el 01/01)`, base: ytdBase },
+      { id: 'all', label: '<span class="lg">Desde inicio</span><span class="sh">Inicio</span>', note: 'desde el ' + F.date(s[0].f), base: -1 },
     ];
-    return defs.map((p) => ({ ...p, ...change(s, p.id === 'all' ? -1 : p.base, L), twr: s[L].t / (p.id === 'all' ? 1 : s[p.base].t) - 1 }));
+    return defs.map((p) => ({ ...p, ...change(s, p.base, L), twr: s[L].t / (p.base < 0 ? 1 : s[p.base].t) - 1 }));
   }
   /* Variación de un periodo SIN aportaciones, sobre total_valor (lo mismo que dibuja el gráfico):
      € = V_fin − V_base − aportaciones;  % = € / (V_base + aportaciones).  b = -1 → desde antes del inicio (valor 0). */
@@ -62,9 +63,8 @@
 
   /* ---------- Curva ---------- */
   function decFor(step) { for (let d = 0; d < 4; d++) { const x = step * Math.pow(10, d); if (Math.abs(x - Math.round(x)) < 1e-6) return d; } return 3; }
-  const MODES = [['pct', 'Rentabilidad %'], ['eur', 'Ganancia €'], ['cap', 'Capital']];
-  function tileVal(p) { return state.mode === 'pct' ? F.pctSigned(p.twr) : (p.eur > 0 ? '+' : '') + F.num(p.eur, 0) + '€'; }
-  function tileSign(p) { return F.sign(state.mode === 'pct' ? p.twr : p.eur); }
+  function tileVal(p) { return F.pctSigned(p.twr); }
+  function tileSign(p) { return F.sign(p.twr); }
   function equityPanel(d) {
     const r = d.resumen;
     return `<section class="panel" aria-labelledby="h-eq"><div class="panel-pad">
@@ -81,13 +81,6 @@
           </div>
         </div>
       </div>
-      <div class="chart-head">
-        <div class="modes" role="group" aria-label="Qué muestra el gráfico">${MODES.map(([k, t]) => `<button type="button" data-mode="${k}" aria-pressed="${state.mode === k}">${t}</button>`).join('')}</div>
-        <div class="toggle" role="group" aria-label="Comparar con" id="ovl-group">
-          <button type="button" class="ovl" data-ovl="inv" aria-pressed="${state.ovl.inv}"><i class="sw" aria-hidden="true"></i>Aportado</button>
-          <button type="button" class="ovl" data-ovl="bench" aria-pressed="${state.ovl.bench}"><i class="sw" aria-hidden="true"></i>Benchmark</button>
-        </div>
-      </div>
       <div class="periods" role="group" aria-label="Periodo" id="periods"></div>
       <div class="chart-area" id="chart-area"></div>
       ${metricsHtml(d)}
@@ -99,53 +92,52 @@
     const ps = periods(d), cur = ps.find((p) => p.id === state.period);
     $('#periods').innerHTML = ps.map((p) => `<button type="button" data-period="${p.id}" aria-pressed="${p.id === state.period}"><span class="pl">${p.label}</span><span class="pv ${tileSign(p)}">${tileVal(p)}</span></button>`).join('');
     const chg = $('#chg');
-    if (state.mode === 'pct') {
-      chg.className = 'chg ' + F.sign(cur.twr);
-      chg.innerHTML = `<span><span aria-hidden="true">${arrow(cur.twr)} </span>${F.pctSigned(cur.twr)}</span>`;
-      $('#chg-note').textContent = `${cur.note} · rentabilidad (TWR) · ganancia ${F.eurSigned(cur.eur)}`;
-    } else {
-      chg.className = 'chg ' + F.sign(cur.eur);
-      chg.innerHTML = `<span><span aria-hidden="true">${arrow(cur.eur)} </span>${F.eurSigned(cur.eur)}</span><span class="sep" aria-hidden="true">|</span><span>${F.pctSigned(cur.pct)}</span>`;
-      $('#chg-note').textContent = `${cur.note} · sin contar aportaciones${cur.flows ? ' (' + F.eur(cur.flows, 0) + ')' : ''}`;
-    }
-    $$('[data-mode]').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.mode === state.mode)));
+    chg.className = 'chg ' + F.sign(cur.twr);
+    chg.innerHTML = `<span><span aria-hidden="true">${arrow(cur.twr)} </span>${F.pctSigned(cur.twr)}</span><span class="sep" aria-hidden="true">|</span><span class="${F.sign(cur.eur)}">${F.eurSigned(cur.eur)}</span>`;
+    $('#chg-note').textContent = `${cur.note} · rentabilidad TWR | ganancia en €`;
     $$('[data-view]').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.view === state.view)));
-    $('#ovl-group').hidden = state.view !== 'graph';
-    $('[data-ovl="inv"]').hidden = state.mode !== 'cap';
     if (state.view === 'calendar') { drawCalendar(area); return; }
-    const b0 = state.period === 'all' ? 0 : cur.base;
-    const s = d.serie.slice(b0), base = s[0];
-    // Benchmark con el mismo dinero (mismas aportaciones) para los modos € y capital
-    const bv = [base.v];
-    for (let k = 1; k < s.length; k++) bv.push(bv[k - 1] * (s[k].b / s[k - 1].b) + (s[k].i - s[k - 1].i));
-    const dates = s.map((p) => p.f); let series, opts;
-    const flowsIdx = s.map((p, k) => ({ k, f: k > 0 ? p.i - s[k - 1].i : 0 })).filter((x) => x.f > 0);
-    if (state.mode === 'pct') {
-      const v = s.map((p) => p.t / base.t - 1);
-      series = [{ label: 'Cartera', values: v, cls: 'main', area: true, endDot: true, endCls: F.sign(v[v.length - 1]) }];
-      if (state.ovl.bench) series.push({ label: 'Benchmark', values: s.map((p) => p.b / base.b - 1), cls: 'bench' });
-      opts = { yFmt: (y, step) => (Math.abs(y) < 1e-12 ? '0%' : F.num(y * 100, decFor(step * 100)) + '%'), tipFmt: (y) => F.pctSigned(y), zeroLine: true, areaBase: 0,
-        ariaLabel: `Rentabilidad acumulada (TWR) del ${F.date(base.f)} al ${F.date(s[s.length - 1].f)}, empezando en 0 %: termina en ${F.pctSigned(v[v.length - 1])}. Mínimo ${F.pctSigned(Math.min(...v))}, máximo ${F.pctSigned(Math.max(...v))}.` + (state.ovl.bench ? ` Benchmark: ${F.pctSigned(s[s.length - 1].b / base.b - 1)}.` : '') };
-    } else if (state.mode === 'eur') {
-      const g0 = state.period === 'all' ? 0 : base.v - base.i;
-      const v = s.map((p) => Math.round((p.v - p.i - g0) * 100) / 100);
-      series = [{ label: 'Ganancia', values: v, cls: 'main', area: true, endDot: true, endCls: F.sign(v[v.length - 1]) }];
-      if (state.ovl.bench) series.push({ label: 'Benchmark', values: s.map((p, k) => Math.round((bv[k] - p.i - (base.v - base.i)) * 100) / 100), cls: 'bench' });
-      opts = { yFmt: (y, step) => (Math.abs(y) < 1e-9 ? '0' : Math.abs(step) >= 1000 ? F.num(y / 1000, decFor(step / 1000)) + 'k' : F.num(y, decFor(step))), tipFmt: (y) => F.eurSigned(y), zeroLine: true, areaBase: 0,
-        ariaLabel: `Ganancia acumulada en euros sin contar aportaciones, del ${F.date(base.f)} al ${F.date(s[s.length - 1].f)}, empezando en 0 €: termina en ${F.eurSigned(v[v.length - 1])}. Mínimo ${F.eurSigned(Math.min(...v))}, máximo ${F.eurSigned(Math.max(...v))}.` };
-    } else {
-      series = [{ label: 'Valor', values: s.map((p) => p.v), cls: 'main', area: true, endDot: true }];
-      if (state.ovl.inv) series.push({ label: 'Aportado', values: s.map((p) => p.i), cls: 'inv' });
-      if (state.ovl.bench) series.push({ label: 'Benchmark', values: bv, cls: 'bench' });
-      opts = { yFmt: (y, step) => F.num(y / 1000, decFor(step / 1000)) + 'k', tipFmt: (y) => F.eur(y, 2),
-        markers: (() => { const gap = Math.max(3, s.length / 10), out = []; let g = null; flowsIdx.forEach((x) => { if (g && x.k - g.last <= gap) { g.sum += x.f; g.last = x.k; out.push({ i: x.k, label: '' }); } else { g = { m: { i: x.k, label: '' }, sum: x.f, last: x.k }; out.push(g.m); g.m.g = g; } }); out.forEach((m) => { if (m.g) { m.label = '+' + F.num(m.g.sum / 1000, 0) + 'k aportado'; delete m.g; } }); return out; })(),
-        ariaLabel: `Capital de la cartera del ${F.date(base.f)} al ${F.date(s[s.length - 1].f)}: de ${F.eur(base.v, 0)} a ${F.eur(s[s.length - 1].v, 0)}.` + (flowsIdx.length ? ` Aportaciones: ${flowsIdx.map((x) => F.date(s[x.k].f) + ' ' + F.eur(x.f, 0)).join(', ')}.` : '') };
-    }
-    const notes = { pct: 'Rentabilidad acumulada ponderada por tiempo: lo que ha hecho el dinero, sin que influyan las aportaciones. Empieza en 0 % al inicio del periodo.',
-      eur: 'Ganancia acumulada en euros = valor − dinero aportado (sin la custodia pendiente). Empieza en 0 € al inicio del periodo.',
-      cap: 'Valor total de la cartera. Las líneas verdes marcan las aportaciones, que explican los saltos.' };
-    area.innerHTML = `<div class="legend">${series.map((x) => `<span><i class="lsw ${x.cls === 'main' ? '' : x.cls}" aria-hidden="true"></i>${x.label}</span>`).join('')}${opts.zeroLine ? '<span><i class="lsw" style="border-top:1.5px solid #6b7280" aria-hidden="true"></i>0</span>' : ''}</div><div id="chart"></div>
-      <p class="fine">${notes[state.mode]}${state.ovl.bench ? ` Benchmark: índice de igual composición (${esc(d.benchmark.pesos_hoy_txt)} hoy)${state.mode === 'pct' ? '' : ' con el mismo dinero y las mismas aportaciones'}.` : ''}</p>`;
+    const S = d.serie, bIdx = cur.base, b0 = Math.max(0, bIdx);
+    const s = S.slice(b0), t0 = bIdx < 0 ? 1 : S[bIdx].t, bb0 = bIdx < 0 ? 1 : S[bIdx].b;
+    const dates = s.map((p) => p.f);
+    const ret = s.map((p) => p.t / t0 - 1);
+    const gain = s.map((p, k) => change(S, bIdx, b0 + k).eur);
+    const inv = s.map((p) => p.i);
+    const bench = s.map((p) => p.b / bb0 - 1);
+    const series = [{ label: 'Rentabilidad', values: ret, cls: 'main', area: true, endDot: true, endCls: F.sign(ret[ret.length - 1]) },
+      { label: 'Capital aportado', values: inv, cls: 'inv', axis: 'y2', step: true }];
+    if (state.ovl.bench) series.push({ label: 'Benchmark', values: bench, cls: 'bench' });
+    const ini = (d.inicios || []).map((m) => ({ ...m, k: dates.indexOf(m.f) })).filter((m) => m.k >= 0);
+    const iniAt = Object.fromEntries(ini.map((m) => [m.k, m]));
+    const points = ini.map((m) => ({ i: m.k, v: inv[m.k], axis: 'y2', cls: 'ini', label: `${m.plataforma} · ${m.aprox ? '~' : ''}${F.date(m.f).slice(0, 5)}`, sub: '+' + F.eur(m.importe, 0) }));
+    const per = state.period === 'all' || bIdx < 0 ? '' : ' (periodo)';
+    const row = (cls, lab, val, sgn, test) => `<span${test ? ` data-tip="${test}"` : ''}><i class="lsw ${cls}" aria-hidden="true"></i>${lab}: <b class="${sgn || ''}">${val}</b></span>`;
+    const tipHtml = (i) => {
+      const m = iniAt[i];
+      return `<strong>${F.date(dates[i])}${m && m.aprox ? ' <small class="tip-aprox">(fecha aprox.)</small>' : ''}</strong>`
+        + row('', 'Rentabilidad', F.pctSigned(ret[i]), F.sign(ret[i]), 'ret')
+        + (state.ovl.bench ? row('bench', 'Benchmark', F.pctSigned(bench[i]), '', 'bench') : '')
+        + row('gain', 'Ganancia' + per, F.eurSigned(gain[i]), F.sign(gain[i]), 'gain')
+        + row('inv', 'Capital aportado', F.eur(inv[i]), '', 'inv')
+        + row('val', 'Valor', F.eur(s[i].v), '', 'val')
+        + (m ? `<span class="tip-ini" data-tip="ini"><i class="ptsw" aria-hidden="true"></i>Inicio en ${esc(m.plataforma)}: <b>${F.eur(m.importe)}</b></span>` : '');
+    };
+    const tipText = (i) => `${F.date(dates[i])}. Rentabilidad ${F.pctSigned(ret[i])}. Ganancia${per} ${F.eurSigned(gain[i])}. Capital aportado ${F.eur(inv[i])}. Valor ${F.eur(s[i].v)}.` + (iniAt[i] ? ` Inicio en ${iniAt[i].plataforma}: ${F.eur(iniAt[i].importe)}.` : '') + (state.ovl.bench ? ` Benchmark ${F.pctSigned(bench[i])}.` : '');
+    const L = s.length - 1;
+    const opts = {
+      yFmt: (y, step) => (Math.abs(y) < 1e-12 ? '0%' : F.num(y * 100, decFor(step * 100)) + '%'),
+      y2Fmt: (y, step) => (Math.abs(y) < 1e-9 ? '0' : F.num(y / 1000, decFor(step / 1000)) + 'k'), y2Zero: true,
+      tipHtml, tipText, points, zeroLine: true, areaBase: 0,
+      ariaLabel: `Rentabilidad acumulada (TWR) del ${F.date(dates[0])} al ${F.date(dates[L])}, empezando en 0 %: termina en ${F.pctSigned(ret[L])} (${F.eurSigned(gain[L])}). Mínimo ${F.pctSigned(Math.min(...ret))}, máximo ${F.pctSigned(Math.max(...ret))}. Capital aportado (eje derecho): de ${F.eur(inv[0], 0)} a ${F.eur(inv[L], 0)}.`
+        + (ini.length ? ' Inicio de la inversión: ' + ini.map((m) => `${m.plataforma} el ${F.date(m.f)} con ${F.eur(m.importe, 0)}`).join('; ') + '.' : '')
+        + (state.ovl.bench ? ` Benchmark: ${F.pctSigned(bench[L])}.` : ''),
+    };
+    area.innerHTML = `<div class="chart-top"><div class="legend">
+        <span><i class="lsw" aria-hidden="true"></i>Rentabilidad % <em>(eje izq.)</em></span>
+        <span><i class="lsw inv" aria-hidden="true"></i><span class="lg">Capital aportado €</span><span class="sh">Aportado €</span> <em>(eje dcho.)</em></span>
+        ${ini.length ? '<span><i class="ptsw" aria-hidden="true"></i><span class="lg">Inicio por plataforma</span><span class="sh">Inicio</span></span>' : ''}
+      </div><button type="button" class="ovl" data-ovl="bench" aria-pressed="${state.ovl.bench}"><i class="sw" aria-hidden="true"></i>Benchmark</button></div><div id="chart"></div>
+      <p class="fine">Rentabilidad TWR: lo que ha hecho el dinero sin el efecto de las aportaciones (empieza en 0 %). Línea discontinua: dinero aportado (eje dcho.). Toca o arrastra el gráfico para ver cada día el % y los €.${state.ovl.bench ? ` Benchmark: índice de igual composición (${esc(d.benchmark.pesos_hoy_txt)} hoy).` : ''}</p>`;
     lineChart($('#chart'), { dates, series, ...opts });
   }
 
@@ -173,12 +165,13 @@
       const dow = (firstDow + day - 1) % 7; if (dow > 4) continue;
       const iso = `${y}-${String(mo).padStart(2, '0')}-${String(day).padStart(2, '0')}`; const it = byDate[iso];
       if (!it) { cells.push(`<div class="d empty"><span class="n" aria-hidden="true">${day}</span><span class="sr-only">${day}: sin dato</span></div>`); continue; }
-      const dv = state.mode === 'pct' ? (it.r == null ? null : F.pctSigned(it.r, 2).replace('\u00a0%', '%')) : (it.e == null ? null : (it.e > 0 ? '+' : '') + F.num(it.e, 0));
+      const dv = state.calUnit === 'pct' ? (it.r == null ? null : F.pctSigned(it.r, 2).replace('\u00a0%', '%')) : (it.e == null ? null : (it.e > 0 ? '+' : '') + F.num(it.e, 0));
       cells.push(`<div class="d ${tint(it.r, 0.0025, 0.0075)}" role="listitem" data-date="${iso}" aria-label="${day} de ${MESES[mo - 1]}: ${it.r == null ? 'inicio de la cartera' : F.pctSigned(it.r) + ', ' + F.eurSigned(it.e)}"><span class="n">${day}</span><span class="v">${dv == null ? 'inicio' : dv}</span></div>`);
     }
-    area.innerHTML = `<p class="label" style="margin:2px 0 8px">${state.mode === 'pct' ? 'Rentabilidad mensual (TWR)' : 'Ganancia mensual en € (sin aportaciones)'} · elige un mes</p>
-      <div class="cal-months" role="group" aria-label="Meses">${months.map((m) => { const [yy, mm] = m.m.split('-').map(Number); return `<button type="button" class="${tint(m.r, 0.01, 0.025)}" data-month="${m.m}" aria-pressed="${m.m === state.month}" aria-label="${MESES[mm - 1]} ${yy}: ${F.pctSigned(m.r)}, ${F.eurSigned(m.e)}"><span class="m">${MESES[mm - 1].slice(0, 3)} ${String(yy).slice(2)}</span><span class="v">${state.mode === 'pct' ? F.pctSigned(m.r, 2).replace('\u00a0%', '%') : (m.e > 0 ? '+' : '') + F.num(m.e, 0) + '€'}</span></button>`; }).join('')}</div>
-      <p class="label" style="margin-top:8px">${MESES[mo - 1]} ${y} · día a día${state.mode === 'pct' ? ' (%)' : ' (€)'}</p>
+    area.innerHTML = `<div class="cal-top"><p class="label" style="margin:0">${state.calUnit === 'pct' ? 'Rentabilidad mensual (TWR)' : 'Ganancia mensual en € (sin aportaciones)'} · elige un mes</p>
+      <div class="toggle sm" role="group" aria-label="Unidad del calendario"><button type="button" data-cal-unit="pct" aria-pressed="${state.calUnit === 'pct'}">%</button><button type="button" data-cal-unit="eur" aria-pressed="${state.calUnit === 'eur'}">€</button></div></div>
+      <div class="cal-months" role="group" aria-label="Meses">${months.map((m) => { const [yy, mm] = m.m.split('-').map(Number); return `<button type="button" class="${tint(m.r, 0.01, 0.025)}" data-month="${m.m}" aria-pressed="${m.m === state.month}" aria-label="${MESES[mm - 1]} ${yy}: ${F.pctSigned(m.r)}, ${F.eurSigned(m.e)}"><span class="m">${MESES[mm - 1].slice(0, 3)} ${String(yy).slice(2)}</span><span class="v">${state.calUnit === 'pct' ? F.pctSigned(m.r, 2).replace('\u00a0%', '%') : (m.e > 0 ? '+' : '') + F.num(m.e, 0) + '€'}</span></button>`; }).join('')}</div>
+      <p class="label" style="margin-top:8px">${MESES[mo - 1]} ${y} · día a día${state.calUnit === 'pct' ? ' (%)' : ' (€)'}</p>
       <div class="cal-head" aria-hidden="true"><span>LUN</span><span>MAR</span><span>MIÉ</span><span>JUE</span><span>VIE</span></div>
       <div class="cal-grid" role="list" aria-label="Rentabilidad diaria de ${MESES[mo - 1]} ${y}">${cells.join('')}</div>
       <div class="cal-legend" aria-hidden="true">Diario: <i class="tn3"></i>&lt; −0,75% <i class="tn2"></i> <i class="tn1"></i>0 <i class="tp1"></i> <i class="tp2"></i><i class="tp3"></i>&gt; +0,75% (color según % del día) · Mensual: tramos de 1% y 2,5%</div>`;
@@ -381,7 +374,7 @@
     const shortH = `<p class="fine">Historial corto (${r.n_rentabilidades} días): dato orientativo.</p>`;
     const T = {
       neto: ['Rentabilidad neta', 'Neta', `<p>Dinero ganado o perdido sobre lo aportado: <b>valor actual − custodia acumulada − aportado</b>.</p><p>El valor de cada fondo ya descuenta sus gastos (TER) y además se resta la custodia de Renta 4 del fondo indexado (${F.eur(d.resumen.custodia_acum)} hasta ahora). El porcentaje es sobre lo aportado (${F.eur(d.resumen.invertido)}).</p><p>No hay rentabilidad objetivo definida, así que no se muestra ninguna barra de objetivo.</p>`],
-      twr: ['Cómo leer el gráfico y los periodos', 'TWR y ganancia', `<p><b>Rentabilidad %</b> (por defecto): rentabilidad acumulada <b>ponderada por tiempo (TWR)</b>. Mide lo que ha hecho el dinero invertido, sin que las aportaciones la muevan. Empieza en 0 % al inicio del periodo. Desde el inicio: ${F.pctSigned(d.resumen.twr)} (anualizada ${F.pctSigned(d.resumen.twr_anual)}).</p><p><b>Ganancia €</b>: valor de la cartera − dinero aportado, en euros. Empieza en 0 €. En los periodos: valor final − valor inicial − aportaciones del periodo; el % que la acompaña es ese importe / (valor inicial + aportaciones). Desde el inicio: ${F.eurSigned(d.resumen.valor - d.resumen.invertido)} (${F.pctSigned(d.resumen.valor / d.resumen.invertido - 1)} sobre lo aportado); tras la custodia pendiente, ${F.eurSigned(d.resumen.pl)}.</p><p>¿Por qué la TWR (${F.pctSigned(d.resumen.twr)}) es más negativa que la ganancia sobre lo aportado (${F.pctSigned(d.resumen.valor / d.resumen.invertido - 1)})? La TWR da el mismo peso a cada día: en las primeras semanas solo había una parte del dinero y cayó; en euros esa caída pesó poco.</p><p><b>Capital</b>: valor total; las líneas verdes marcan las aportaciones, que explican los saltos.</p><p>La TWR es la base de todas las métricas de riesgo.</p>`],
+      twr: ['Cómo leer el gráfico y los periodos', 'TWR y ganancia', `<p><b>Rentabilidad %</b> (línea principal): rentabilidad acumulada <b>ponderada por tiempo (TWR)</b>. Mide lo que ha hecho el dinero invertido, sin que las aportaciones la muevan. Empieza en 0 % al inicio del periodo. Desde el inicio: ${F.pctSigned(d.resumen.twr)} (anualizada ${F.pctSigned(d.resumen.twr_anual)}).</p><p><b>Ganancia €</b> (en el recuadro de arriba y al tocar el gráfico): valor de la cartera − dinero aportado, en euros. En los periodos: valor final − valor inicial − aportaciones del periodo. Desde el inicio: ${F.eurSigned(d.resumen.valor - d.resumen.invertido)} (${F.pctSigned(d.resumen.valor / d.resumen.invertido - 1)} sobre lo aportado); tras la custodia pendiente, ${F.eurSigned(d.resumen.pl)}.</p><p><b>Capital aportado</b>: línea discontinua con su escala en € a la derecha; cada escalón es una aportación. Los puntos marcan cuándo empezó la inversión en cada plataforma y con cuánto.</p><p><b>YTD</b>: en lo que va de año (desde el 01/01, o desde el inicio si la cartera empezó este año).</p><p>¿Por qué la TWR (${F.pctSigned(d.resumen.twr)}) es más negativa que la ganancia sobre lo aportado (${F.pctSigned(d.resumen.valor / d.resumen.invertido - 1)})? La TWR da el mismo peso a cada día: en las primeras semanas solo había una parte del dinero y cayó; en euros esa caída pesó poco.</p><p>La TWR es la base de todas las métricas de riesgo.</p>`],
       vol: ['Volatilidad', 'σ ann', `<p>Cuánto oscila la cartera de un día para otro, llevado a un año. A más volatilidad, más vaivenes por el camino.</p><p>${F.pct(r.volatilidad)} es baja: más de la mitad de la cartera está en monetario y renta fija. La bolsa mundial suele moverse entre el 12 % y el 20 %.</p><p class="fine">Desviación típica de las rentabilidades diarias TWR × √252. Coincide con Cartera Family (${F.num(r.volatilidad_fuente_pct, 2)} %).</p>`],
       sharpe: ['Ratio de Sharpe', 'SR', `<p>Rentabilidad <b>por encima del tipo sin riesgo</b> por cada unidad de riesgo. Por encima de 1 se considera bueno; negativo significa que en este periodo habría rendido más dejar el dinero al tipo sin riesgo.</p><p>Tipo sin riesgo: <b>${esc(lr.nombre)}</b>, media ${F.num(lr.medio_pct, 3)} % del ${F.date(lr.desde)} al ${F.date(lr.hasta)} (habría rendido ${F.pctSigned(r.rf_total)} en el periodo).</p><p class="fine">Media diaria de (rentabilidad − €STR) / desviación típica de esos excesos × √252. Fuente: <a href="${esc(lr.web)}" target="_blank" rel="noopener">BCE, serie ${esc(lr.serie)}</a>.</p>${shortH}`],
       sortino: ['Ratio de Sortino', 'Sortino', `<p>Como el Sharpe, pero <b>solo penaliza las caídas</b>: la volatilidad de los días en que la cartera rinde menos que el €STR. Los días buenos no cuentan como «riesgo».</p><p>${F.num(r.sortino, 2)}: negativo porque en el periodo la cartera ha rendido menos que el €STR.</p><p class="fine">Exceso medio anualizado / desviación a la baja anualizada (objetivo = €STR).</p>${shortH}`],
@@ -428,9 +421,9 @@
     app.addEventListener('click', (ev) => {
       const t = ev.target.closest('button'); if (!t) return;
       if (t.dataset.view) { state.view = t.dataset.view; drawEquity(); }
-      else if (t.dataset.mode) { state.mode = t.dataset.mode; drawEquity(); }
+      else if (t.dataset.calUnit) { state.calUnit = t.dataset.calUnit; drawEquity(); const b = $(`[data-cal-unit="${state.calUnit}"]`); b && b.focus(); }
       else if (t.dataset.period) { state.period = t.dataset.period; if (state.view !== 'graph') state.view = 'graph'; drawEquity(); const pb = $(`[data-period="${state.period}"]`); pb && pb.focus(); }
-      else if (t.dataset.ovl) { state.ovl[t.dataset.ovl] = !state.ovl[t.dataset.ovl]; t.setAttribute('aria-pressed', String(state.ovl[t.dataset.ovl])); drawEquity(); }
+      else if (t.dataset.ovl) { state.ovl[t.dataset.ovl] = !state.ovl[t.dataset.ovl]; drawEquity(); const b = $(`[data-ovl="${t.dataset.ovl}"]`); b && b.focus(); }
       else if (t.dataset.month) { state.month = t.dataset.month; drawEquity(); const b = $(`[data-month="${state.month}"]`); b && b.focus(); }
       else if (t.dataset.sort) { state.sort = t.dataset.sort; drawTable(); const b = $(`#ftable [data-sort="${state.sort}"]`); b && b.focus(); }
       else if (t.dataset.pos) openSheet(t.dataset.pos);
