@@ -4,9 +4,8 @@
   const $ = (s, r = document) => r.querySelector(s);
   const $$ = (s, r = document) => [...r.querySelectorAll(s)];
   const esc = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
-  const state = { data: null, view: 'graph', calUnit: 'pct', period: 'all', ovl: { bench: false }, month: null, sort: 'valor', q: '', tipo: '', tm: 'tipo', tmColor: 'compra' };
+  const state = { data: null, view: 'graph', calUnit: 'pct', period: 'all', ovl: { bench: false }, month: null, sort: 'valor', q: '', tipo: '' };
   const TIPO_K = { 'Renta Variable': 'rv', 'Renta Variable (indexado)': 'rv', 'Renta Fija': 'rf', 'Monetario': 'mon', 'Retorno Absoluto': 'ra', 'Plan de pensiones': 'pp', 'Liquidez': 'liq' };
-  const K_COLOR = { rv: '#3b82f6', rf: '#10b981', mon: '#f59e0b', ra: '#8b5cf6', pp: '#0ea5e9', liq: '#9ca3af' };
   const tk = (t) => TIPO_K[t] || 'liq';
   const arrow = (x) => (x > 0 ? '▲' : x < 0 ? '▼' : '■');
   const signed = (x, fmt) => `<span class="${F.sign(x)}"><span aria-hidden="true">${arrow(x)} </span>${fmt(x)}</span>`;
@@ -20,7 +19,6 @@
     wallet: '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="3" y="6" width="18" height="14" rx="2"/><path d="M16 13h2M3 10h18"/></svg>',
     target: '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M3 17l6-6 4 4 8-8"/><path d="M14 7h7v7"/></svg>',
     brief: '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="3" y="7" width="18" height="13" rx="2"/><path d="M8 7V5a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>',
-    bars: '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg>',
     line: '<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M3 3v18h18"/><path d="m7 15 4-4 3 3 5-6"/></svg>',
     search: '<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>',
   };
@@ -306,76 +304,6 @@
     const dlg = $('#sheet'); dlg.showModal ? dlg.showModal() : dlg.setAttribute('open', ''); dlg.scrollTop = 0;
   }
 
-  /* ---------- Mapa (treemap) ---------- */
-  function squarify(items, x, y, w, h) {
-    const out = []; const total = items.reduce((a, it) => a + it.v, 0); if (!total) return out;
-    let rest = items.map((it) => ({ ...it, a: (it.v / total) * w * h }));
-    const worst = (row, side) => { const s = row.reduce((a, r) => a + r.a, 0); const mx = Math.max(...row.map((r) => r.a)), mn = Math.min(...row.map((r) => r.a)); return Math.max((side * side * mx) / (s * s), (s * s) / (side * side * mn)); };
-    while (rest.length) {
-      const side = Math.min(w, h); let row = [rest[0]]; let i = 1;
-      while (i < rest.length && worst(row.concat(rest[i]), side) <= worst(row, side)) { row.push(rest[i]); i++; }
-      const s = row.reduce((a, r) => a + r.a, 0);
-      if (w >= h) { const cw = s / h; let cy = y; row.forEach((r) => { const ch = r.a / cw; out.push({ ...r, x, y: cy, w: cw, h: ch }); cy += ch; }); x += cw; w -= cw; }
-      else { const ch = s / w; let cx = x; row.forEach((r) => { const cw = r.a / ch; out.push({ ...r, x: cx, y, w: cw, h: ch }); cx += cw; }); y += ch; h -= ch; }
-      rest = rest.slice(i);
-    }
-    return out;
-  }
-  const PLAT_PAL = ['#3b82f6', '#8b5cf6', '#0ea5e9', '#f59e0b', '#10b981'];
-  function platColor(g) { const ps = [...new Set(state.data.posiciones.slice().sort((a, b) => b.valor - a.valor).map((p) => p.plataforma))]; return PLAT_PAL[Math.max(0, ps.indexOf(g)) % PLAT_PAL.length]; }
-  function vizPanel() {
-    return `<section class="panel" aria-labelledby="h-viz">
-      <div class="viz-h"><div><div class="sec-h"><span class="sec-ico">${ICON.bars}</span><h2 id="h-viz">Visualización de cartera</h2></div>
-        <p class="sub">Mapa de calor: el tamaño es el peso en la cartera y el color, la rentabilidad.</p></div>
-        <div class="toggle" role="group" aria-label="Agrupar por"><button type="button" data-tm="tipo" aria-pressed="true">Tipo activo</button><button type="button" data-tm="fondo" aria-pressed="false">Fondo</button><button type="button" data-tm="plataforma" aria-pressed="false">Plataforma</button></div></div>
-      <div class="viz-body"><div class="viz-sub"><p class="label" style="margin:0">Mapa de calor</p>
-        <div class="toggle" role="group" aria-label="Color según"><button type="button" data-tmc="compra" aria-pressed="true">Desde compra</button><button type="button" data-tmc="diario" aria-pressed="false">Último día</button></div></div>
-        <div class="assoc" id="assoc"></div>
-        <div class="tmap" id="tmap" role="img"></div>
-        <p class="tmap-note" style="margin-top:10px">Toca un recuadro para ver el detalle del fondo. Los fondos muy pequeños (p. ej. la liquidez) apenas se ven: están en la tabla.</p></div>
-    </section>`;
-  }
-  function drawTreemap() {
-    const d = state.data, host = $('#tmap'); host.innerHTML = '';
-    const W = host.clientWidth, H = host.clientHeight; const metric = state.tmColor === 'diario' ? 'diario' : 'plp';
-    const [t1, t2] = metric === 'diario' ? [0.0025, 0.0075] : [0.01, 0.05];
-    const pos = d.posiciones.filter((p) => p.valor > 0).slice().sort((a, b) => b.valor - a.valor);
-    const groupKey = state.tm === 'tipo' ? (p) => p.tipo : state.tm === 'plataforma' ? (p) => p.plataforma : null;
-    const tile = (p, r, parent) => {
-      const el = document.createElement('button'); el.type = 'button';
-      const area = r.w * r.h; el.className = 'tile ' + tint(p[metric], t1, t2) + (r.w < 46 || r.h < 34 ? ' tiny' : (r.h < 62 || r.w < 66) ? ' noname small' : area < 9000 ? ' small' : '');
-      Object.assign(el.style, { left: r.x + 2 + 'px', top: r.y + 2 + 'px', width: Math.max(0, r.w - 4) + 'px', height: Math.max(0, r.h - 4) + 'px' });
-      el.dataset.pos = p.id;
-      el.setAttribute('aria-label', `${p.nombre}: peso ${F.pct(p.peso)}, ${metric === 'diario' ? 'último día' : 'desde compra'} ${F.pctSigned(p[metric])}. Ver detalle`);
-      el.innerHTML = `<span class="tn">${esc(p.nombre)}</span><span class="tr"><span>${F.pct(p.peso, 1)}</span><span class="tp">${F.pctSigned(p[metric], 2).replace('\u00a0%', '%')}</span></span>`;
-      parent.appendChild(el);
-    };
-    if (!groupKey) {
-      squarify(pos.map((p) => ({ v: p.valor, p })), 0, 0, W, H).forEach((r) => tile(r.p, r, host));
-    } else {
-      const groups = {}; pos.forEach((p) => { (groups[groupKey(p)] = groups[groupKey(p)] || []).push(p); });
-      const items = Object.entries(groups).map(([g, ps]) => ({ g, ps, v: ps.reduce((a, p) => a + p.valor, 0) })).sort((a, b) => b.v - a.v);
-      squarify(items, 0, 0, W, H).forEach((r) => {
-        const box = document.createElement('div'); box.className = 'tgroup';
-        const col = state.tm === 'tipo' ? K_COLOR[tk(r.ps[0].tipo)] : platColor(r.g);
-        Object.assign(box.style, { left: r.x + 3 + 'px', top: r.y + 3 + 'px', width: Math.max(0, r.w - 6) + 'px', height: Math.max(0, r.h - 6) + 'px', borderColor: col + '99', background: col + '0d' });
-        const gw = r.ps.reduce((a, p) => a + p.peso, 0);
-        const small = r.w < 60 || r.h < 50;
-        box.innerHTML = small ? '' : `<div class="gh"><span>${esc(r.g)}</span><span>${r.ps.length} pos · ${F.pct(gw, 1)}</span></div><div class="inner"></div>`;
-        if (small) box.style.padding = '2px';
-        host.appendChild(box);
-        const inner = small ? box : box.querySelector('.inner');
-        const iw = small ? r.w - 10 : r.w - 14, ih = small ? r.h - 10 : r.h - 6 - 30;
-        squarify(r.ps.map((p) => ({ v: p.valor, p })), 0, 0, Math.max(0, iw), Math.max(0, ih)).forEach((t) => tile(t.p, t, inner));
-      });
-    }
-    host.setAttribute('aria-label', `Mapa de calor por ${state.tm === 'tipo' ? 'tipo de activo' : state.tm}: ` + pos.map((p) => `${p.nombre} ${F.pct(p.peso, 1)}`).join(', '));
-    const assocItems = state.tm === 'fondo' ? [] : Object.entries(pos.reduce((a, p) => { const k = groupKey(p); a[k] = (a[k] || 0) + p.peso; return a; }, {}));
-    $('#assoc').innerHTML = `<span class="label" style="margin-right:4px">${state.tm === 'fondo' ? 'Color' : 'Grupos'}:</span>` + (assocItems.length
-      ? assocItems.map(([k, w]) => `<span class="chipk"><i style="background:${state.tm === 'tipo' ? K_COLOR[tk(k)] : platColor(k)}"></i>${esc(k)} <b>${F.pct(w, 1)}</b></span>`).join('')
-      : `<span class="chipk"><i style="background:#991b1b"></i>pérdida</span><span class="chipk"><i style="background:#15803d"></i>ganancia</span><span class="chipk">tramos ${metric === 'diario' ? '0,25% / 0,75%' : '1% / 5%'}</span>`);
-  }
-
   /* ---------- Explicaciones ---------- */
   function infoText(key) {
     const d = state.data, r = d.ratios, lr = d.libre_riesgo, b = d.benchmark, v = d.resumen.valor;
@@ -424,9 +352,9 @@
     $('#foot-date').textContent = 'Datos a ' + F.date(d.fecha_datos);
     const app = $('#app');
     app.innerHTML = `<div class="page-h"><h1>Resumen de la cartera</h1><p>Histórico y métricas de la Cartera Family · datos a ${F.date(d.fecha_datos)}</p></div>`
-      + equityPanel(d) + kpisHtml(d) + positionsPanel(d) + vizPanel() + footerHtml(d);
+      + equityPanel(d) + kpisHtml(d) + positionsPanel(d) + footerHtml(d);
     app.setAttribute('aria-busy', 'false');
-    drawEquity(); drawTable(); drawTreemap();
+    drawEquity(); drawTable();
     app.addEventListener('click', (ev) => {
       const t = ev.target.closest('button'); if (!t) return;
       if (t.dataset.view) { state.view = t.dataset.view; drawEquity(); }
@@ -436,14 +364,12 @@
       else if (t.dataset.month) { state.month = t.dataset.month; drawEquity(); const b = $(`[data-month="${state.month}"]`); b && b.focus(); }
       else if (t.dataset.sort) { state.sort = t.dataset.sort; drawTable(); const b = $(`#ftable [data-sort="${state.sort}"]`); b && b.focus(); }
       else if (t.dataset.pos) openSheet(t.dataset.pos);
-      else if (t.dataset.tm) { state.tm = t.dataset.tm; $$('[data-tm]').forEach((b) => b.setAttribute('aria-pressed', String(b === t))); drawTreemap(); }
-      else if (t.dataset.tmc) { state.tmColor = t.dataset.tmc; $$('[data-tmc]').forEach((b) => b.setAttribute('aria-pressed', String(b === t))); drawTreemap(); }
       else if (t.dataset.info) openInfo(t.dataset.info);
       else if (t.dataset.lock) lock();
     });
     $('#q').addEventListener('input', (ev) => { state.q = ev.target.value; drawTable(); });
     $('#tipo').addEventListener('change', (ev) => { state.tipo = ev.target.value; drawTable(); });
-    let rz, lastW = window.innerWidth; window.addEventListener('resize', () => { if (window.innerWidth === lastW) return; lastW = window.innerWidth; clearTimeout(rz); rz = setTimeout(() => { drawEquity(); drawTreemap(); }, 150); });
+    let rz, lastW = window.innerWidth; window.addEventListener('resize', () => { if (window.innerWidth === lastW) return; lastW = window.innerWidth; clearTimeout(rz); rz = setTimeout(() => { drawEquity(); }, 150); });
   }
   ['info', 'sheet'].forEach((id) => $('#' + id).addEventListener('click', (ev) => { if (ev.target.id === id) ev.target.close(); }));
 

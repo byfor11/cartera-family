@@ -200,28 +200,6 @@ main { padding-top: 22px; padding-bottom: calc(28px + env(safe-area-inset-bottom
 .empty-row td { text-align: center !important; color: var(--dim); padding: 28px !important; }
 .pos-foot { padding: 0 16px 16px; }
 
-/* Mapa */
-.viz-h { display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: 12px; padding: 16px; border-bottom: 1px solid var(--line); }
-.viz-body { padding: 16px; }
-.viz-sub { display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 12px; }
-.assoc { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; padding: 10px 12px; border: 1px solid var(--line); border-radius: 12px; background: #0a0c12; margin-bottom: 12px; }
-.assoc .chipk { display: inline-flex; align-items: center; gap: 6px; padding: 3px 9px; border-radius: 8px; background: var(--card2); border: 1px solid var(--line2); font: 10.5px var(--mono); color: var(--text2); }
-.assoc .chipk i { width: 8px; height: 8px; border-radius: 50%; }
-.tmap { position: relative; width: 100%; height: 460px; }
-@media (min-width: 760px) { .tmap { height: 520px; } }
-.tgroup { position: absolute; border: 1px solid; border-radius: 14px; padding: 26px 4px 4px; overflow: hidden; }
-.tgroup .gh { position: absolute; top: 6px; left: 9px; right: 9px; display: flex; justify-content: space-between; gap: 6px; font: 700 9.5px var(--mono); letter-spacing: .1em; text-transform: uppercase; color: var(--text2); white-space: nowrap; overflow: hidden; }
-.tgroup .gh span:last-child { color: var(--dim); font-weight: 500; }
-.tgroup .inner { position: relative; width: 100%; height: 100%; }
-.tile { position: absolute; border-radius: 10px; padding: 7px 8px; overflow: hidden; cursor: pointer; text-align: left; display: flex; flex-direction: column; justify-content: space-between; font-family: var(--mono); }
-.tile:hover { filter: brightness(1.15); }
-.tile .tn { font: 700 11px/1.25 var(--sans); display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
-.tile .tr { display: flex; justify-content: space-between; align-items: flex-end; gap: 4px; font-size: 10.5px; }
-.tile .tp { font-weight: 800; font-size: 12px; }
-.tile.tiny .tn, .tile.tiny .tr { display: none; }
-.tile.small .tr span:first-child { display: none; }
-.tmap-note { font: 10.5px var(--mono); color: var(--dim); }
-
 /* Pie */
 .foot { font-size: 13px; color: var(--text2); }
 .foot h2 { font-size: 15px; margin-bottom: 8px; }
@@ -274,7 +252,6 @@ p.big { margin: 4px 0 0; }
 .kpi-ic { display: inline-flex; align-items: center; gap: 12px; }
 .periods .sh { display: none; }
 @media (max-width: 480px) { .periods .lg { display: none; } .periods .sh { display: inline; } }
-.tile.noname .tn { display: none; }
 .sheet-top { display: flex; justify-content: space-between; align-items: center; gap: 10px; margin: -6px 0 2px; }
 .sheet-top .dtag { margin: 0; }
 .sheet-nums .nw { display: block; white-space: nowrap; font-size: 12px; }
