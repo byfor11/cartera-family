@@ -24,8 +24,8 @@
     const N = dates.length;
     let min = Infinity, max = -Infinity;
     series.forEach((s) => s.values.forEach((v) => { if (v != null) { min = Math.min(min, v); max = Math.max(max, v); } }));
-    const pad = (max - min) * 0.08 || Math.abs(max) * 0.01 || 1; min -= pad; max += pad;
-    const ticks = niceTicks(min, max, 4); min = Math.min(min, ticks[0]); max = Math.max(max, ticks[ticks.length - 1]);
+    const pad = (max - min) * 0.05 || Math.abs(max) * 0.01 || 1; min -= pad; max += pad;
+    const ticks = niceTicks(min, max, opts.nTicks || 5); min = Math.min(min, ticks[0]); max = Math.max(max, ticks[ticks.length - 1]);
     const x = (i) => P.l + (N <= 1 ? 0 : (i / (N - 1)) * (W - P.l - P.r));
     const y = (v) => P.t + (1 - (v - min) / (max - min)) * (H - P.t - P.b);
 
@@ -48,12 +48,20 @@
       const tx = el('text', { x: x(i), y: H - 6, 'text-anchor': k === 0 ? 'start' : k === nLab - 1 ? 'end' : 'middle' }, gGrid);
       tx.textContent = F.dateShort(dates[i]);
     }
+    if (opts.zeroLine && min < 0 && max > 0) el('line', { x1: P.l, x2: W - P.r, y1: y(0), y2: y(0), class: 'zero', 'aria-hidden': 'true' }, svg);
+    (opts.markers || []).forEach((m) => {
+      if (m.i < 0 || m.i >= N) return;
+      const g = el('g', { class: 'marker', 'aria-hidden': 'true' }, svg);
+      el('line', { x1: x(m.i), x2: x(m.i), y1: P.t + 12, y2: H - P.b }, g);
+      if (m.label) { const tx = el('text', { x: x(m.i) + 4, y: P.t + 9 + (m.row || 0) * 11, 'text-anchor': x(m.i) > W - 90 ? 'end' : 'start' }, g); tx.textContent = m.label; }
+    });
     series.forEach((s) => {
       let d = ''; let started = false; let first = null, last = null;
       s.values.forEach((v, i) => { if (v == null) { started = false; return; } d += (started ? 'L' : 'M') + x(i).toFixed(1) + ' ' + y(v).toFixed(1); started = true; if (first == null) first = i; last = i; });
-      if (s.area && first != null) el('path', { d: d + `L${x(last)} ${H - P.b}L${x(first)} ${H - P.b}Z`, fill: `url(#${gid})`, 'aria-hidden': 'true' }, svg);
+      const baseY = opts.areaBase != null ? Math.min(H - P.b, Math.max(P.t, y(opts.areaBase))) : H - P.b;
+      if (s.area && first != null) el('path', { d: d + `L${x(last)} ${baseY}L${x(first)} ${baseY}Z`, fill: `url(#${gid})`, 'aria-hidden': 'true' }, svg);
       el('path', { d, class: 'line ' + (s.cls || ''), 'aria-hidden': 'true' }, svg);
-      if (s.endDot && last != null) el('circle', { cx: x(last), cy: y(s.values[last]), r: 4.5, class: 'enddot', 'aria-hidden': 'true' }, svg);
+      if (s.endDot && last != null) el('circle', { cx: x(last), cy: y(s.values[last]), r: 4.5, class: 'enddot ' + (s.endCls || ''), 'aria-hidden': 'true' }, svg);
     });
     const cursor = el('g', { class: 'cursor', 'aria-hidden': 'true', style: 'display:none' }, svg);
     const vline = el('line', { y1: P.t, y2: H - P.b }, cursor);

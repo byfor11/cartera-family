@@ -278,3 +278,12 @@ p.big { margin: 4px 0 0; }
 .sheet-top { display: flex; justify-content: space-between; align-items: center; gap: 10px; margin: -6px 0 2px; }
 .sheet-top .dtag { margin: 0; }
 .sheet-nums .nw { display: block; white-space: nowrap; font-size: 12px; }
+.chart .zero { stroke: #6b7280; stroke-width: 1.2; }
+.chart .marker line { stroke: rgba(16, 185, 129, .55); stroke-width: 1; stroke-dasharray: 2 3; }
+.chart .marker text { fill: #6ee7b7; font: 600 9.5px var(--mono); }
+.chart .enddot.neg { fill: var(--red); } .chart .enddot.pos { fill: var(--green); }
+.modes { display: inline-flex; gap: 4px; padding: 4px; background: #111319; border: 1px solid rgba(59,130,246,.3); border-radius: 14px; flex-wrap: wrap; }
+.modes button { min-height: 44px; padding: 0 12px; border-radius: 11px; border: 1px solid transparent; background: transparent; color: var(--text2); font: 600 12px var(--mono); cursor: pointer; }
+.modes button[aria-pressed="true"] { background: var(--blue-bg); color: var(--blue-t2); border-color: var(--blue); }
+.chart-head { display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 8px; }
+.ovl[hidden] { display: none; }
