@@ -113,9 +113,9 @@
     if (state.ovl.bench) series.push({ label: 'Benchmark', values: bench, cls: 'bench' });
     const ini = (d.inicios || []).map((m) => ({ ...m, k: dates.indexOf(m.f) })).filter((m) => m.k >= 0);
     const iniAt = Object.fromEntries(ini.map((m) => [m.k, m]));
-    const flowK = s.map((p, k) => (k > 0 && p.i - s[k - 1].i > 0.005) || (k === 0 && isAll) ? k : -1).filter((k) => k >= 0 && !ini.some((m) => dates[k] >= m.desde && dates[k] <= m.f));
+    const flowK = []; // v10: solo se marcan las dos aportaciones; los escalones de la línea son compras de fondos
     const dm = (f) => F.date(f).slice(0, 5);
-    const points = ini.map((m) => ({ i: m.k, v: 0, cls: 'ini', label: `${m.plataforma} · ${m.desde !== m.f ? dm(m.desde).slice(0, 2) + '–' + dm(m.f) : dm(m.f)}`, sub: '+' + F.eur(m.importe, 0) }))
+    const points = ini.map((m) => ({ i: m.k, v: 0, cls: 'ini', label: `${m.plataforma} · ${dm(m.f_aportacion)}`, sub: '+' + F.eur(m.importe, 0) }))
       .concat(flowK.map((k) => ({ i: k, v: 0 })));
     const row = (cls, lab, val, sgn) => `<span><i class="lsw ${cls}" aria-hidden="true"></i>${lab}: <b class="${sgn || ''}">${val}</b></span>`;
     const tipHtml = (i) => {
@@ -126,23 +126,23 @@
         + row('', gain[i] >= 0 ? 'Ganancia' : 'Pérdida', `${F.eurSigned(gain[i])} (${F.pctSigned(gpct[i])})`, F.sign(gain[i]))
         + row('gain', 'Rentabilidad TWR', F.pctSigned(twr[i]), F.sign(twr[i]))
         + (state.ovl.bench ? row('bench', 'Benchmark', F.pctSigned(bench[i])) : '')
-        + (m ? `<span class="tip-ini"><i class="ptsw" aria-hidden="true"></i>Capital inicial ${esc(m.plataforma)}: <b>${F.eur(m.importe)}</b></span>`
-             + (m.desglose.length > 1 ? `<span class="tip-sub">${m.desglose.map((x) => dm(x.f) + ' ' + F.eur(x.importe)).join(' · ')}</span>` : '')
-           : fl > 0.005 ? `<span class="tip-sub">Aportación del día: ${F.eur(fl)}</span>` : '');
+        + (m ? `<span class="tip-ini"><i class="ptsw" aria-hidden="true"></i>Aportación ${esc(m.plataforma)} (${dm(m.f_aportacion)}): <b>${F.eur(m.importe)}</b></span>`
+             + `<span class="tip-sub">Compras de fondos: ${m.compras.map(dm).join(' · ')}</span>`
+           : fl > 0.005 && i > 0 ? `<span class="tip-sub">Compras de fondos del día: ${F.eur(fl)}</span>` : '');
     };
-    const tipText = (i) => `${F.date(dates[i])}. Valor ${F.eur(s[i].v)}. ${baseName} ${F.eur(baseEur[i])}. ${gain[i] >= 0 ? 'Ganancia' : 'Pérdida'} ${F.eurSigned(gain[i])}, ${F.pctSigned(gpct[i])}. Rentabilidad TWR ${F.pctSigned(twr[i])}.` + (iniAt[i] ? ` Capital inicial en ${iniAt[i].plataforma}: ${F.eur(iniAt[i].importe)}.` : '') + (state.ovl.bench ? ` Benchmark ${F.pctSigned(bench[i])}.` : '');
+    const tipText = (i) => `${F.date(dates[i])}. Valor ${F.eur(s[i].v)}. ${baseName} ${F.eur(baseEur[i])}. ${gain[i] >= 0 ? 'Ganancia' : 'Pérdida'} ${F.eurSigned(gain[i])}, ${F.pctSigned(gpct[i])}. Rentabilidad TWR ${F.pctSigned(twr[i])}.` + (iniAt[i] ? ` Aportación a ${iniAt[i].plataforma} el ${F.date(iniAt[i].f_aportacion)}: ${F.eur(iniAt[i].importe)}.` : '') + (state.ovl.bench ? ` Benchmark ${F.pctSigned(bench[i])}.` : '');
     const opts = {
       yFmt: (y, step) => (Math.abs(y) < 1e-12 ? '0%' : F.num(y * 100, decFor(step * 100)) + '%'),
       tipHtml, tipText, points, areaBase: 0, baseline: {},
       ariaLabel: `Ganancia o pérdida sobre ${isAll ? 'el capital aportado' : 'la base del periodo'} del ${F.date(dates[0])} al ${F.date(dates[L])}: la línea de la cartera va por encima de la línea de capital aportado cuando hay ganancia y por debajo cuando hay pérdida. Termina en ${F.pctSigned(gpct[L])} (${F.eurSigned(gain[L])}) sobre ${F.eur(baseEur[L], 0)}. Mínimo ${F.pctSigned(Math.min(...gpct))}, máximo ${F.pctSigned(Math.max(...gpct))}.`
-        + (ini.length ? ' Capital inicial: ' + ini.map((m) => `${m.plataforma} ${F.eur(m.importe, 0)} (${F.date(m.desde)}${m.desde !== m.f ? ' a ' + F.date(m.f) : ''})`).join('; ') + '.' : '')
+        + (ini.length ? ' Aportaciones: ' + ini.map((m) => `${m.plataforma} ${F.eur(m.importe, 0)} el ${F.date(m.f_aportacion)}`).join('; ') + '.' : '')
         + (state.ovl.bench ? ` Benchmark con el mismo dinero: ${F.pctSigned(bench[L])}.` : ''),
     };
     area.innerHTML = `<div class="chart-top"><div class="legend">
         <span><i class="lsw" aria-hidden="true"></i>Cartera</span>
         <span><i class="lsw inv" aria-hidden="true"></i>${isAll ? '<span class="lg">Capital aportado</span><span class="sh">Aportado</span>' : 'Base del periodo'}</span>
         <span class="lg-gl"><i class="gl pos" aria-hidden="true"></i>gana <i class="gl neg" aria-hidden="true"></i>pierde</span>
-        ${ini.length ? '<span><i class="ptsw" aria-hidden="true"></i><span class="lg">Capital inicial por plataforma</span><span class="sh">Inicio</span></span>' : ''}
+        ${ini.length ? '<span><i class="ptsw" aria-hidden="true"></i><span class="lg">Aportaciones</span><span class="sh">Aportación</span></span>' : ''}
       </div><button type="button" class="ovl" data-ovl="bench" aria-pressed="${state.ovl.bench}"><i class="sw" aria-hidden="true"></i>Benchmark</button></div><div id="chart"></div>
       <p class="fine">${isAll ? 'La línea discontinua es el dinero aportado' : 'La línea discontinua es el valor al inicio del periodo más lo aportado después'}: la cartera va <b class="pos">por encima</b> cuando ganas y <b class="neg">por debajo</b> cuando pierdes (% = ganancia ÷ ${isAll ? 'lo aportado' : 'esa base'}). Toca o arrastra el gráfico para ver cada día los € y la rentabilidad TWR.${state.ovl.bench ? ` Benchmark: el mismo dinero, con las mismas aportaciones, en un índice de igual composición (${esc(d.benchmark.pesos_hoy_txt)} hoy).` : ''}</p>`;
     lineChart($('#chart'), { dates, series, ...opts });
@@ -221,7 +221,8 @@
   /* ---------- KPIs ---------- */
   function kpisHtml(d) {
     const r = d.resumen, s = d.serie;
-    const flows = s.filter((p, k) => k === 0 ? p.i > 0 : p.i !== s[k - 1].i);
+    const ap = d.inicios || [];
+    const late = (m) => m.detalle.filter((x) => x.f && (new Date(x.f) - new Date(m.f_aportacion)) / 864e5 > 7);
     return `<section class="kpis" aria-label="Resumen">
       <article class="kpi"><div class="kpi-top"><h2 class="label">Patrimonio total</h2><span class="ico ico-b">${ICON.euro}</span></div>
         <p class="kv" style="margin-bottom:0">${F.eur(r.valor)}</p>
@@ -229,7 +230,7 @@
         <p class="ks" style="margin:2px 0 0" data-test="pl">${signed(r.pl, F.eurSigned)} resultado neto (tras ${F.eur(r.custodia_acum)} de custodia pendiente)</p></article>
       <article class="kpi"><div class="kpi-top"><h2 class="label">Aportado a la cartera</h2><span class="ico ico-g">${ICON.wallet}</span></div>
         <p class="kv" style="margin-bottom:0" data-test="invertido">${F.eur(r.invertido)}</p>
-        <div class="kpi-rows"><div><span>Aportaciones</span><b>${flows.length}</b></div><div><span>Fechas</span><span>${flows.map((p) => F.dateShort(p.f)).join(' · ')}</span></div><div><span>Liquidez incluida</span><span>${F.eur(r.efectivo)}</span></div></div></article>
+        <div class="kpi-rows" data-test="aportaciones"><div><span>Aportaciones</span><b>${ap.length}</b></div>${ap.map((m) => `<div data-test="aport-${esc(m.plataforma)}"><span>${F.date(m.f_aportacion).slice(0, 5)} · ${esc(m.plataforma)}</span><b>${F.eur(m.importe)}</b></div>${late(m).map((x) => `<div class="kpi-note"><span>incluye ${esc(x.nombre)} ${F.eur(x.importe)} (${F.date(x.f).slice(0, 5)})</span></div>`).join('')}`).join('')}<div><span>Liquidez incluida</span><span>${F.eur(r.efectivo)}</span></div></div></article>
       <article class="kpi"><div class="kpi-top"><h2 class="label">Rentabilidad</h2><span class="kpi-ic">${infoBtn('neto', 'la rentabilidad neta')}<span class="ico ico-a">${ICON.target}</span></span></div>
         <p class="kv" style="margin-bottom:0" data-test="plp">${signed(r.plp, F.pctSigned)} <span class="chip-note">neta</span></p>
         <div class="kpi-rows"><div><span>TWR desde inicio</span><b data-test="twr">${signed(r.twr, F.pctSigned)}</b></div><div><span>TWR anualizada</span><b>${signed(r.twr_anual, F.pctSigned)}</b></div><div><span>Objetivo</span><span>sin definir</span></div></div></article>
@@ -314,7 +315,7 @@
     const shortH = `<p class="fine">Historial corto (${r.n_rentabilidades} días): dato orientativo.</p>`;
     const T = {
       neto: ['Rentabilidad neta', 'Neta', `<p>Dinero ganado o perdido sobre lo aportado: <b>valor actual − custodia acumulada − aportado</b>.</p><p>El valor de cada fondo ya descuenta sus gastos (TER) y además se resta la custodia de Renta 4 del fondo indexado (${F.eur(d.resumen.custodia_acum)} hasta ahora). El porcentaje es sobre lo aportado (${F.eur(d.resumen.invertido)}).</p><p>No hay rentabilidad objetivo definida, así que no se muestra ninguna barra de objetivo.</p>`],
-      twr: ['Cómo leer el gráfico y los periodos', 'TWR y ganancia', `<p><b>Gráfico</b>: la línea discontinua es el <b>capital aportado</b> y la línea azul es la cartera. Cuando la cartera vale más que lo aportado, la línea azul va <b>por encima</b> (zona verde); cuando vale menos, <b>por debajo</b> (zona roja). El % es la ganancia ÷ lo aportado. En 1 día, 1 semana y 1 mes la base es el valor al inicio del periodo más lo aportado después. Los puntos verdes marcan el capital inicial de cada plataforma.</p><p><b>Ganancia €</b>: valor − aportado. En los periodos: valor final − valor inicial − aportaciones del periodo; el % es ese importe ÷ (valor inicial + aportaciones). Desde el inicio: ${F.eurSigned(d.resumen.valor - d.resumen.invertido)} (${F.pctSigned(d.resumen.valor / d.resumen.invertido - 1)}); tras la custodia pendiente, ${F.eurSigned(d.resumen.pl)}.</p><p><b>Rentabilidad TWR</b> (en el tooltip y junto al importe): rentabilidad <b>ponderada por tiempo</b>, lo que ha hecho el dinero sin que influyan las aportaciones. Desde el inicio: ${F.pctSigned(d.resumen.twr)} (anualizada ${F.pctSigned(d.resumen.twr_anual)}). Es la base de las métricas de riesgo.</p><p><b>YTD</b>: en lo que va de año (desde el 01/01, o desde el inicio si la cartera empezó este año).</p><p>¿Por qué la TWR (${F.pctSigned(d.resumen.twr)}) es más negativa que la ganancia sobre lo aportado (${F.pctSigned(d.resumen.valor / d.resumen.invertido - 1)})? La TWR da el mismo peso a cada día: en las primeras semanas solo había una parte del dinero y cayó; en euros esa caída pesó poco.</p>`],
+      twr: ['Cómo leer el gráfico y los periodos', 'TWR y ganancia', `<p><b>Gráfico</b>: la línea discontinua es el <b>capital aportado</b> y la línea azul es la cartera. Cuando la cartera vale más que lo aportado, la línea azul va <b>por encima</b> (zona verde); cuando vale menos, <b>por debajo</b> (zona roja). El % es la ganancia ÷ lo aportado. En 1 día, 1 semana y 1 mes la base es el valor al inicio del periodo más lo aportado después. Los puntos verdes marcan las dos aportaciones: ${d.inicios.map((m) => `${esc(m.plataforma)} el ${F.date(m.f_aportacion)} (${F.eur(m.importe)})`).join(' y ')}. Los escalones de la línea discontinua están en las fechas de compra de los fondos, que es cuando el dinero empezó a invertirse.</p><p><b>Ganancia €</b>: valor − aportado. En los periodos: valor final − valor inicial − aportaciones del periodo; el % es ese importe ÷ (valor inicial + aportaciones). Desde el inicio: ${F.eurSigned(d.resumen.valor - d.resumen.invertido)} (${F.pctSigned(d.resumen.valor / d.resumen.invertido - 1)}); tras la custodia pendiente, ${F.eurSigned(d.resumen.pl)}.</p><p><b>Rentabilidad TWR</b> (en el tooltip y junto al importe): rentabilidad <b>ponderada por tiempo</b>, lo que ha hecho el dinero sin que influyan las aportaciones. Desde el inicio: ${F.pctSigned(d.resumen.twr)} (anualizada ${F.pctSigned(d.resumen.twr_anual)}). Es la base de las métricas de riesgo.</p><p><b>YTD</b>: en lo que va de año (desde el 01/01, o desde el inicio si la cartera empezó este año).</p><p>¿Por qué la TWR (${F.pctSigned(d.resumen.twr)}) es más negativa que la ganancia sobre lo aportado (${F.pctSigned(d.resumen.valor / d.resumen.invertido - 1)})? La TWR da el mismo peso a cada día: en las primeras semanas solo había una parte del dinero y cayó; en euros esa caída pesó poco.</p>`],
       vol: ['Volatilidad', 'σ ann', `<p>Cuánto oscila la cartera de un día para otro, llevado a un año. A más volatilidad, más vaivenes por el camino.</p><p>${F.pct(r.volatilidad)} es baja: más de la mitad de la cartera está en monetario y renta fija. La bolsa mundial suele moverse entre el 12 % y el 20 %.</p><p class="fine">Desviación típica de las rentabilidades diarias TWR × √252. Coincide con Cartera Family (${F.num(r.volatilidad_fuente_pct, 2)} %).</p>`],
       sharpe: ['Ratio de Sharpe', 'SR', `<p>Rentabilidad <b>por encima del tipo sin riesgo</b> por cada unidad de riesgo. Por encima de 1 se considera bueno; negativo significa que en este periodo habría rendido más dejar el dinero al tipo sin riesgo.</p><p>Tipo sin riesgo: <b>${esc(lr.nombre)}</b>, media ${F.num(lr.medio_pct, 3)} % del ${F.date(lr.desde)} al ${F.date(lr.hasta)} (habría rendido ${F.pctSigned(r.rf_total)} en el periodo).</p><p class="fine">Media diaria de (rentabilidad − €STR) / desviación típica de esos excesos × √252. Fuente: <a href="${esc(lr.web)}" target="_blank" rel="noopener">BCE, serie ${esc(lr.serie)}</a>.</p>${shortH}`],
       sortino: ['Ratio de Sortino', 'Sortino', `<p>Como el Sharpe, pero <b>solo penaliza las caídas</b>: la volatilidad de los días en que la cartera rinde menos que el €STR. Los días buenos no cuentan como «riesgo».</p><p>${F.num(r.sortino, 2)}: negativo porque en el periodo la cartera ha rendido menos que el €STR.</p><p class="fine">Exceso medio anualizado / desviación a la baja anualizada (objetivo = €STR).</p>${shortH}`],

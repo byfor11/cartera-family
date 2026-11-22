@@ -308,3 +308,8 @@ p.big { margin: 4px 0 0; }
   .ftable .first { min-width: 138px; max-width: 150px; }
   .ftable .first .nm { font-size: 12px; }
 }
+
+/* v10: aportaciones */
+.kpi-rows .kpi-note { margin-top: -2px; }
+.kpi-rows .kpi-note span { font-size: 10.5px; color: var(--dim); }
+.kpi-rows [data-test^="aport-"] b { color: var(--text); font-weight: 600; }
