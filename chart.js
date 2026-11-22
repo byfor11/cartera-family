@@ -40,7 +40,7 @@
     ticks.forEach((t) => {
       if (t < min - 1e-9 || t > max + 1e-9) return;
       el('line', { x1: P.l, x2: W - P.r, y1: y(t), y2: y(t) }, gGrid);
-      const tx = el('text', { x: P.l - 6, y: y(t) + 4, 'text-anchor': 'end' }, gGrid); tx.textContent = opts.yFmt(t);
+      const tx = el('text', { x: P.l - 6, y: y(t) + 4, 'text-anchor': 'end' }, gGrid); tx.textContent = opts.yFmt(t, ticks.length > 1 ? ticks[1] - ticks[0] : 1);
     });
     const nLab = W < 360 ? 3 : 4;
     for (let k = 0; k < nLab; k++) {
