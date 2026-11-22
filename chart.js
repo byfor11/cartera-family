@@ -18,8 +18,8 @@
   /* opts: { dates, series:[{key,label,values,cls,area,dashed}], yFmt, tipFmt, ariaLabel, onMove } */
   function lineChart(host, opts) {
     host.innerHTML = '';
-    const W = Math.max(280, host.clientWidth || 340), H = Math.round(Math.min(260, Math.max(200, W * 0.62)));
-    const P = { l: 52, r: 12, t: 12, b: 26 };
+    const W = Math.max(280, host.clientWidth || 340), H = Math.round(Math.min(340, Math.max(220, W * 0.6)));
+    const P = { l: 46, r: 10, t: 14, b: 24 };
     const { dates, series } = opts;
     const N = dates.length;
     let min = Infinity, max = -Infinity;
@@ -34,7 +34,7 @@
     const defs = el('defs', {}, svg);
     const gid = 'g' + Math.random().toString(36).slice(2, 8);
     const grad = el('linearGradient', { id: gid, x1: 0, y1: 0, x2: 0, y2: 1 }, defs);
-    el('stop', { offset: '0%', class: 'area-top' }, grad); el('stop', { offset: '100%', class: 'area-bottom' }, grad);
+    el('stop', { offset: '0%', class: 'a1' }, grad); el('stop', { offset: '100%', class: 'a2' }, grad);
 
     const gGrid = el('g', { class: 'grid', 'aria-hidden': 'true' }, svg);
     ticks.forEach((t) => {
@@ -52,7 +52,8 @@
       let d = ''; let started = false; let first = null, last = null;
       s.values.forEach((v, i) => { if (v == null) { started = false; return; } d += (started ? 'L' : 'M') + x(i).toFixed(1) + ' ' + y(v).toFixed(1); started = true; if (first == null) first = i; last = i; });
       if (s.area && first != null) el('path', { d: d + `L${x(last)} ${H - P.b}L${x(first)} ${H - P.b}Z`, fill: `url(#${gid})`, 'aria-hidden': 'true' }, svg);
-      el('path', { d, class: 'line ' + (s.cls || '') + (s.dashed ? ' dashed' : ''), 'aria-hidden': 'true' }, svg);
+      el('path', { d, class: 'line ' + (s.cls || ''), 'aria-hidden': 'true' }, svg);
+      if (s.endDot && last != null) el('circle', { cx: x(last), cy: y(s.values[last]), r: 4.5, class: 'enddot', 'aria-hidden': 'true' }, svg);
     });
     const cursor = el('g', { class: 'cursor', 'aria-hidden': 'true', style: 'display:none' }, svg);
     const vline = el('line', { y1: P.t, y2: H - P.b }, cursor);
@@ -64,7 +65,7 @@
       i = Math.max(0, Math.min(N - 1, i)); cur = i;
       cursor.style.display = ''; vline.setAttribute('x1', x(i)); vline.setAttribute('x2', x(i));
       series.forEach((s, k) => { const v = s.values[i]; if (v == null) { dots[k].style.display = 'none'; return; } dots[k].style.display = ''; dots[k].setAttribute('cx', x(i)); dots[k].setAttribute('cy', y(v)); });
-      tip.innerHTML = `<strong>${F.date(dates[i])}</strong>` + series.map((s) => `<span><i class="sw ${s.cls || ''}${s.dashed ? ' dashed' : ''}"></i>${s.label}: <b>${s.values[i] == null ? '—' : opts.tipFmt(s.values[i], s)}</b></span>`).join('');
+      tip.innerHTML = `<strong>${F.date(dates[i])}</strong>` + series.map((s) => `<span><i class="lsw ${s.cls || ''}"></i>${s.label}: <b>${s.values[i] == null ? '—' : opts.tipFmt(s.values[i], s)}</b></span>`).join('');
       tip.hidden = false;
       const px = (x(i) / W) * wrap.clientWidth; const tw = tip.offsetWidth;
       tip.style.left = Math.max(0, Math.min(wrap.clientWidth - tw, px - tw / 2)) + 'px';

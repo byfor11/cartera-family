@@ -1,253 +1,425 @@
-/* Cartera Family: descifra data/portfolio.enc.json (generado por build_data.py + encrypt_data.py) y pinta la app. */
+/* Cartera Family v3: descifra data/portfolio.enc.json (build_data.py + encrypt_data.py) y pinta la app (estilo «Fortea»). */
 (function () {
   'use strict';
   const $ = (s, r = document) => r.querySelector(s);
+  const $$ = (s, r = document) => [...r.querySelectorAll(s)];
   const esc = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
-  const state = { mode: 'capital', range: 'all', sort: 'peso', view: 'cards', data: null };
-  const CLASES = { rv: 'Renta variable', rf: 'Renta fija y retorno abs.', liq: 'Monetario y liquidez' };
+  const state = { data: null, view: 'graph', period: 'all', ovl: { inv: false, bench: false }, month: null, sort: 'valor', q: '', tipo: '', tm: 'tipo', tmColor: 'compra' };
+  const TIPO_K = { 'Renta Variable': 'rv', 'Renta Variable (indexado)': 'rv', 'Renta Fija': 'rf', 'Monetario': 'mon', 'Retorno Absoluto': 'ra', 'Plan de pensiones': 'pp', 'Liquidez': 'liq' };
+  const K_COLOR = { rv: '#3b82f6', rf: '#10b981', mon: '#f59e0b', ra: '#8b5cf6', pp: '#0ea5e9', liq: '#9ca3af' };
+  const tk = (t) => TIPO_K[t] || 'liq';
+  const arrow = (x) => (x > 0 ? '▲' : x < 0 ? '▼' : '■');
+  const signed = (x, fmt) => `<span class="${F.sign(x)}"><span aria-hidden="true">${arrow(x)} </span>${fmt(x)}</span>`;
+  const infoBtn = (key, label) => `<button type="button" class="info-btn" data-info="${key}" aria-label="Qué es ${esc(label)}">i</button>`;
+  const ICON = {
+    cal: '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M16 3v4M8 3v4M3 10h18"/></svg>',
+    layers: '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="m12 3 9 5-9 5-9-5 9-5z"/><path d="m3 13 9 5 9-5"/></svg>',
+    bank: '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M3 10h18L12 4 3 10zM5 10v8M9 10v8M15 10v8M19 10v8M3 20h18"/></svg>',
+    clock: '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>',
+    euro: '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M17 6a7 7 0 1 0 0 12M4 10h9M4 14h9"/></svg>',
+    wallet: '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="3" y="6" width="18" height="14" rx="2"/><path d="M16 13h2M3 10h18"/></svg>',
+    target: '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M3 17l6-6 4 4 8-8"/><path d="M14 7h7v7"/></svg>',
+    brief: '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="3" y="7" width="18" height="13" rx="2"/><path d="M8 7V5a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>',
+    bars: '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg>',
+    line: '<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M3 3v18h18"/><path d="m7 15 4-4 3 3 5-6"/></svg>',
+    search: '<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>',
+  };
 
-  function arrow(x) { return x > 0 ? '▲' : x < 0 ? '▼' : '■'; }
-  function signed(x, fmt) { return `<span class="${F.sign(x)}"><span aria-hidden="true">${arrow(x)} </span>${fmt(x)}</span>`; }
-  function infoBtn(key, label) { return `<button class="info-btn" data-info="${key}" aria-label="Qué es ${esc(label)}">i</button>`; }
-
-  /* ---------- Cabecera ---------- */
-  function hero(d) {
-    const r = d.resumen;
-    return `<section class="card hero" aria-labelledby="h-capital">
-      <h1 id="h-capital" class="eyebrow">Capital de la cartera</h1>
-      <p class="big" data-test="valor">${F.eur(r.valor)}</p>
-      <p class="sub">Último día (${F.date(d.fecha_datos)}): ${signed(r.pl_dia, F.eurSigned)} <span class="muted">(${F.pctSigned(r.twr_dia)})</span></p>
-      <dl class="kpis">
-        <div><dt>Invertido</dt><dd data-test="invertido">${F.eur(r.invertido)}</dd></div>
-        <div><dt>Resultado neto ${infoBtn('neto', 'el resultado neto')}</dt><dd data-test="pl">${signed(r.pl, F.eurSigned)}</dd></div>
-        <div><dt>Rentab. neta s/ invertido ${infoBtn('neto', 'la rentabilidad neta')}</dt><dd data-test="plp">${signed(r.plp, F.pctSigned)}</dd></div>
-        <div><dt>Rentab. TWR desde inicio ${infoBtn('twr', 'la rentabilidad TWR')}</dt><dd data-test="twr">${signed(r.twr, F.pctSigned)}</dd></div>
-      </dl>
-      <p class="fine">Desde el ${F.dateLong(d.inicio)}. Resultado neto de comisiones: incluye ${F.eur(r.custodia_acum)} de custodia de Fidelity acumulada.</p>
-    </section>`;
+  /* ---------- Reloj ---------- */
+  function tickClock() {
+    const now = new Date();
+    try {
+      const t = now.toLocaleTimeString('es-ES', { timeZone: 'Europe/Madrid', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false });
+      const tz = (now.toLocaleTimeString('es-ES', { timeZone: 'Europe/Madrid', timeZoneName: 'short' }).split(' ').pop() || '').replace('GMT+1', 'CET').replace('GMT+2', 'CEST');
+      $('#clock-t').textContent = t + ' ' + tz;
+      $('#clock-d').textContent = now.toLocaleDateString('es-ES', { timeZone: 'Europe/Madrid', weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+    } catch (e) { $('#clock-t').textContent = now.toTimeString().slice(0, 8); }
   }
+  tickClock(); setInterval(tickClock, 1000);
 
-  /* ---------- Gráfico ---------- */
-  function chartCard() {
-    return `<section class="card" aria-labelledby="h-evol">
-      <div class="card-head"><h2 id="h-evol">Evolución</h2>
-        <div class="seg" role="group" aria-label="Qué mostrar">
-          <button data-mode="capital" aria-pressed="true">Capital</button>
-          <button data-mode="twr" aria-pressed="false">Rentabilidad</button>
-        </div></div>
-      <div id="legend" class="legend"></div>
-      <div id="chart" class="chart-host"></div>
-      <div class="seg seg-range" role="group" aria-label="Periodo">
-        <button data-range="1m" aria-pressed="false">1M</button>
-        <button data-range="3m" aria-pressed="false">3M</button>
-        <button data-range="all" aria-pressed="true">Todo</button>
-      </div>
-      <p class="fine" id="chart-note"></p>
-    </section>`;
-  }
-  function drawChart() {
-    const d = state.data; let s = d.serie;
-    if (state.range !== 'all') {
-      const last = new Date(s[s.length - 1].f); const from = new Date(last); from.setMonth(from.getMonth() - (state.range === '1m' ? 1 : 3));
-      const iso = from.toISOString().slice(0, 10); const k = s.findIndex((p) => p.f >= iso); s = s.slice(Math.max(0, k - 1));
-    }
-    const dates = s.map((p) => p.f);
-    let series, yFmt, tipFmt, label, note;
-    if (state.mode === 'capital') {
-      series = [
-        { key: 'v', label: 'Valor', values: s.map((p) => p.v), cls: 's1', area: true },
-        { key: 'i', label: 'Invertido', values: s.map((p) => p.i), cls: 's2', dashed: true },
-      ];
-      yFmt = (v) => F.num(v / 1000, 0) + ' k'; tipFmt = (v) => F.eur(v, 0);
-      const a = s[0], b = s[s.length - 1];
-      label = `Gráfico de capital del ${F.date(a.f)} al ${F.date(b.f)}. Valor de ${F.eur(a.v, 0)} a ${F.eur(b.v, 0)}; invertido de ${F.eur(a.i, 0)} a ${F.eur(b.i, 0)}.`;
-      const ap = d.serie.filter((p, k) => k > 0 && p.i !== d.serie[k - 1].i).map((p) => F.dateShort(p.f));
-      note = (ap.length ? 'Los saltos de la línea discontinua son las aportaciones (' + ap.join(', ') + '). ' : '') + 'Toca o arrastra sobre el gráfico para ver cada día.';
-    } else {
-      const t0 = s[0].t, b0 = s[0].b;
-      series = [
-        { key: 't', label: 'Cartera (TWR)', values: s.map((p) => p.t / t0 - 1), cls: 's1', area: false },
-        { key: 'b', label: 'Benchmark', values: s.map((p) => p.b / b0 - 1), cls: 's3', dashed: true },
-      ];
-      yFmt = (v) => F.num(v * 100, 1) + '%'; tipFmt = (v) => F.pctSigned(v);
-      const lt = series[0].values[series[0].values.length - 1], lb = series[1].values[series[1].values.length - 1];
-      label = `Gráfico de rentabilidad ponderada por tiempo del ${F.date(s[0].f)} al ${F.date(s[s.length - 1].f)}: cartera ${F.pctSigned(lt)}, benchmark ${F.pctSigned(lb)}.`;
-      note = 'Rentabilidad ponderada por tiempo (no le afectan las aportaciones), desde el inicio del periodo elegido. Benchmark: ' + d.benchmark.descripcion;
-    }
-    $('#legend').innerHTML = series.map((x) => `<span><i class="sw ${x.cls}${x.dashed ? ' dashed' : ''}" aria-hidden="true"></i>${x.label}</span>`).join('');
-    $('#chart-note').textContent = note;
-    lineChart($('#chart'), { dates, series, yFmt, tipFmt, ariaLabel: label });
-  }
-
-  /* ---------- Reparto ---------- */
-  function allocation(d) {
-    const tot = {}; d.posiciones.forEach((p) => { tot[p.clase] = (tot[p.clase] || 0) + p.valor; });
-    const order = ['rv', 'rf', 'liq'];
-    const sum = order.reduce((a, k) => a + (tot[k] || 0), 0);
-    const parts = order.map((k) => ({ k, v: tot[k] || 0, w: (tot[k] || 0) / sum }));
-    return `<section class="card" aria-labelledby="h-rep"><h2 id="h-rep">Reparto por tipo de activo</h2>
-      <div class="stack" role="img" aria-label="${parts.map((p) => CLASES[p.k] + ' ' + F.pct(p.w, 1)).join(', ')}">
-        ${parts.map((p) => `<span class="c-${p.k}" style="width:${(p.w * 100).toFixed(2)}%"></span>`).join('')}</div>
-      <ul class="stack-legend">${parts.map((p) => `<li><i class="sw c-${p.k}" aria-hidden="true"></i><span>${CLASES[p.k]}</span><b>${F.pct(p.w, 1)}</b><span class="muted">${F.eur(p.v, 0)}</span></li>`).join('')}</ul>
-    </section>`;
-  }
-
-  /* ---------- Ratios ---------- */
-  function ratios(d) {
-    const r = d.ratios;
-    const cards = [
-      { k: 'vol', t: 'Volatilidad anualizada', v: F.pct(r.volatilidad), s: 'Riesgo: cuánto oscila el valor' },
-      { k: 'sharpe', t: 'Ratio de Sharpe', v: F.num(r.sharpe, 2), s: `Frente al €STR (media ${F.num(d.libre_riesgo.medio_pct, 2)} %)` },
-      { k: 'alfa', t: 'Alfa anual', v: F.pctSigned(r.alfa_anual), s: 'Frente al benchmark equivalente' },
-      { k: 'beta', t: 'Beta', v: F.num(r.beta, 2), s: `Frente al benchmark (R² ${F.num(r.r2, 2)})` },
-      { k: 'dd', t: 'Máximo drawdown', v: F.pct(r.max_drawdown), s: `Del ${F.date(r.max_dd_pico)} al ${F.date(r.max_dd_valle)}` },
+  /* ---------- Periodos ---------- */
+  function addDays(iso, n) { const d = new Date(iso + 'T12:00:00Z'); d.setUTCDate(d.getUTCDate() + n); return d.toISOString().slice(0, 10); }
+  function addMonths(iso, n) { const d = new Date(iso + 'T12:00:00Z'); d.setUTCMonth(d.getUTCMonth() + n); return d.toISOString().slice(0, 10); }
+  function periods(d) {
+    const s = d.serie, L = s.length - 1, last = s[L].f;
+    const baseIdx = (target) => { let k = 0; for (let i = 0; i <= L; i++) if (s[i].f <= target) k = i; return k; };
+    const defs = [
+      { id: '1d', label: '1 día', note: 'último día', base: L - 1 },
+      { id: '1w', label: '1 sem.', note: 'última semana', base: baseIdx(addDays(last, -7)) },
+      { id: '1m', label: '1 mes', note: 'último mes', base: baseIdx(addMonths(last, -1)) },
+      { id: '3m', label: '3 meses', note: 'últimos 3 meses', base: baseIdx(addMonths(last, -3)) },
+      { id: 'all', label: '<span class="lg">Desde inicio</span><span class="sh">Inicio</span>', note: 'desde el ' + F.date(s[0].f), base: 0 },
     ];
-    return `<section class="card" aria-labelledby="h-rat"><div class="card-head"><h2 id="h-rat">Ratios de la cartera</h2></div>
-      <p class="fine">Calculados con ${r.n_rentabilidades} rentabilidades diarias (${F.date(d.inicio)} – ${F.date(d.fecha_datos)}). Con menos de un año de historia son orientativos.</p>
-      <div class="ratios">${cards.map((c) => `<article class="ratio" data-test="ratio-${c.k}">
-        <div class="ratio-top"><h3>${c.t}</h3>${infoBtn(c.k, c.t)}</div>
-        <p class="ratio-v">${c.v}</p><p class="ratio-s">${esc(c.s)}</p></article>`).join('')}</div>
+    return defs.map((p) => ({ ...p, pct: s[L].t / s[p.base].t - 1, eur: s[L].pl - s[p.base].pl }));
+  }
+
+  /* ---------- Curva ---------- */
+  function equityPanel(d) {
+    const r = d.resumen; const ps = periods(d); const cur = ps.find((p) => p.id === state.period);
+    return `<section class="panel" aria-labelledby="h-eq"><div class="panel-pad">
+      <div class="eq-top">
+        <div>
+          <h2 class="label" id="h-eq">Equity curve · capital de la cartera</h2>
+          <p class="big" data-test="valor">${F.eur(r.valor)}</p>
+          <div class="chip-row"><span class="chg ${F.sign(cur.pct)}" id="chg"><span><span aria-hidden="true">${arrow(cur.pct)} </span>${F.pctSigned(cur.pct)}</span><span class="sep" aria-hidden="true">|</span><span>${F.eurSigned(cur.eur)}</span></span><span class="chip-note" id="chg-note">${esc(cur.note)}</span>${infoBtn('twr', 'la rentabilidad TWR de los periodos')}</div>
+        </div>
+        <div class="ctrls">
+          <div class="toggle" role="group" aria-label="Vista">
+            <button type="button" data-view="graph" aria-pressed="${state.view === 'graph'}">${ICON.line}Gráfico</button>
+            <button type="button" data-view="calendar" aria-pressed="${state.view === 'calendar'}">${ICON.cal.replace('16', '13').replace('16', '13')}Calendario</button>
+          </div>
+          <div class="toggle" role="group" aria-label="Comparar con" id="ovl-group">
+            <button type="button" class="ovl" data-ovl="inv" aria-pressed="${state.ovl.inv}"><i class="sw" aria-hidden="true"></i>Aportado</button>
+            <button type="button" class="ovl" data-ovl="bench" aria-pressed="${state.ovl.bench}"><i class="sw" aria-hidden="true"></i>Benchmark</button>
+          </div>
+        </div>
+      </div>
+      <div class="periods" role="group" aria-label="Periodo">${ps.map((p) => `<button type="button" data-period="${p.id}" aria-pressed="${p.id === state.period}"><span class="pl">${p.label}</span><span class="pv ${F.sign(p.pct)}">${F.pctSigned(p.pct)}</span></button>`).join('')}</div>
+      <div class="chart-area" id="chart-area"></div>
+      ${metricsHtml(d)}
+      ${infoListHtml(d)}
+    </div></section>`;
+  }
+  function drawEquity() {
+    const d = state.data, area = $('#chart-area');
+    const ps = periods(d), cur = ps.find((p) => p.id === state.period);
+    const chg = $('#chg'); chg.className = 'chg ' + F.sign(cur.pct);
+    chg.innerHTML = `<span><span aria-hidden="true">${arrow(cur.pct)} </span>${F.pctSigned(cur.pct)}</span><span class="sep" aria-hidden="true">|</span><span>${F.eurSigned(cur.eur)}</span>`;
+    $('#chg-note').textContent = cur.note + (cur.id === 'all' ? ' · resultado neto' : '');
+    $$('[data-period]').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.period === state.period)));
+    $$('[data-view]').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.view === state.view)));
+    $('#ovl-group').hidden = state.view !== 'graph';
+    if (state.view === 'calendar') { drawCalendar(area); return; }
+    const s = d.serie.slice(cur.base);
+    // Benchmark con el mismo dinero: mismas aportaciones, rentabilidad diaria del benchmark
+    const bv = [s[0].v];
+    for (let k = 1; k < s.length; k++) bv.push(bv[k - 1] * (s[k].b / s[k - 1].b) + (s[k].i - s[k - 1].i));
+    const series = [{ label: 'Valor', values: s.map((p) => p.v), cls: 'main', area: true, endDot: true }];
+    if (state.ovl.inv) series.push({ label: 'Aportado', values: s.map((p) => p.i), cls: 'inv' });
+    if (state.ovl.bench) series.push({ label: 'Benchmark', values: bv, cls: 'bench' });
+    area.innerHTML = `<div class="legend">${series.map((x) => `<span><i class="lsw ${x.cls === 'main' ? '' : x.cls}" aria-hidden="true"></i>${x.label}</span>`).join('')}</div><div id="chart"></div>
+      ${state.ovl.bench ? `<p class="fine">Benchmark: qué valdría el mismo dinero, con las mismas aportaciones, invertido en un índice de igual composición (${esc(d.benchmark.pesos_hoy_txt)} hoy).</p>` : ''}`;
+    const a = s[0], b = s[s.length - 1];
+    const label = `Gráfico del valor de la cartera del ${F.date(a.f)} al ${F.date(b.f)}: de ${F.eur(a.v, 0)} a ${F.eur(b.v, 0)}.` + (state.ovl.inv ? ` Aportado: ${F.eur(b.i, 0)}.` : '') + (state.ovl.bench ? ` Benchmark con el mismo dinero: ${F.eur(bv[bv.length - 1], 0)}.` : '');
+    const span = Math.max(...series.flatMap((x) => x.values)) - Math.min(...series.flatMap((x) => x.values));
+    lineChart($('#chart'), { dates: s.map((p) => p.f), series, ariaLabel: label, yFmt: (v) => (span < 3000 ? F.num(v / 1000, 1) : F.num(v / 1000, 0)) + 'k', tipFmt: (v) => F.eur(v, 0) });
+  }
+
+  /* ---------- Calendario ---------- */
+  function tint(v, t1, t2) { if (v == null || Math.abs(v) < 1e-9) return 't0'; const a = Math.abs(v); const lvl = a <= t1 ? 1 : a <= t2 ? 2 : 3; return (v < 0 ? 'tn' : 'tp') + lvl; }
+  function calendarData(d) {
+    const s = d.serie, months = {};
+    for (let k = 0; k < s.length; k++) {
+      const m = s[k].f.slice(0, 7); (months[m] = months[m] || { m, days: [], first: k, last: k }).last = k;
+      months[m].days.push({ f: s[k].f, r: k === 0 ? null : s[k].t / s[k - 1].t - 1 });
+    }
+    return Object.values(months).map((o) => ({ ...o, r: s[o.last].t / (o.first === 0 ? s[0].t : s[o.first - 1].t) - 1 }));
+  }
+  const MESES = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'];
+  function drawCalendar(area) {
+    const months = calendarData(state.data);
+    if (!state.month) state.month = months[months.length - 1].m;
+    const sel = months.find((m) => m.m === state.month);
+    const [y, mo] = sel.m.split('-').map(Number);
+    const cells = []; const firstDow = (new Date(Date.UTC(y, mo - 1, 1)).getUTCDay() + 6) % 7; // 0 = lunes
+    const nDays = new Date(Date.UTC(y, mo, 0)).getUTCDate(); const byDate = Object.fromEntries(sel.days.map((x) => [x.f, x]));
+    let pad = firstDow < 5 ? firstDow : 0;
+    for (let i = 0; i < pad; i++) cells.push('<div class="d empty" aria-hidden="true"></div>');
+    for (let day = 1; day <= nDays; day++) {
+      const dow = (firstDow + day - 1) % 7; if (dow > 4) continue;
+      const iso = `${y}-${String(mo).padStart(2, '0')}-${String(day).padStart(2, '0')}`; const it = byDate[iso];
+      if (!it) { cells.push(`<div class="d empty"><span class="n" aria-hidden="true">${day}</span><span class="sr-only">${day}: sin dato</span></div>`); continue; }
+      cells.push(`<div class="d ${tint(it.r, 0.0025, 0.0075)}" role="listitem" aria-label="${day} de ${MESES[mo - 1]}: ${it.r == null ? 'inicio de la cartera' : F.pctSigned(it.r)}"><span class="n">${day}</span><span class="v">${it.r == null ? 'inicio' : F.pctSigned(it.r, 2).replace('\u00a0%', '%')}</span></div>`);
+    }
+    area.innerHTML = `<p class="label" style="margin:2px 0 8px">Rentabilidad mensual (TWR) · elige un mes</p>
+      <div class="cal-months" role="group" aria-label="Meses">${months.map((m) => { const [yy, mm] = m.m.split('-').map(Number); return `<button type="button" class="${tint(m.r, 0.01, 0.025)}" data-month="${m.m}" aria-pressed="${m.m === state.month}" aria-label="${MESES[mm - 1]} ${yy}: ${F.pctSigned(m.r)}"><span class="m">${MESES[mm - 1].slice(0, 3)} ${String(yy).slice(2)}</span><span class="v">${F.pctSigned(m.r, 1).replace('\u00a0%', '%')}</span></button>`; }).join('')}</div>
+      <p class="label" style="margin-top:8px">${MESES[mo - 1]} ${y} · día a día</p>
+      <div class="cal-head" aria-hidden="true"><span>LUN</span><span>MAR</span><span>MIÉ</span><span>JUE</span><span>VIE</span></div>
+      <div class="cal-grid" role="list" aria-label="Rentabilidad diaria de ${MESES[mo - 1]} ${y}">${cells.join('')}</div>
+      <div class="cal-legend" aria-hidden="true">Diario: <i class="tn3"></i>&lt; −0,75% <i class="tn2"></i> <i class="tn1"></i>0 <i class="tp1"></i> <i class="tp2"></i><i class="tp3"></i>&gt; +0,75% · Mensual: tramos de 1% y 2,5%</div>`;
+  }
+
+  /* ---------- Métricas ---------- */
+  function metricsHtml(d) {
+    const r = d.ratios;
+    const col = (x) => (x >= 0 ? 'v-green' : 'v-red');
+    const M = [
+      ['vol', 'Volatilidad', 'σ ann', F.pct(r.volatilidad), 'v-blue'],
+      ['sharpe', 'Ratio de Sharpe', 'SR', F.num(r.sharpe, 2), col(r.sharpe)],
+      ['sortino', 'Ratio de Sortino', 'Sortino', F.num(r.sortino, 2), col(r.sortino)],
+      ['alfa', 'Alfa anual', 'α ann', F.pctSigned(r.alfa_anual), col(r.alfa_anual)],
+      ['beta', 'Beta', 'β', F.num(r.beta, 2), 'v-blue'],
+      ['var', 'Pérdida en un día malo', 'VaR 95', F.pct(r.var95), 'v-red'],
+      ['cvar', 'Pérdida en días extremos', 'CVaR 95', F.pct(r.cvar95), 'v-red'],
+      ['dd', 'Peor racha', 'MDD', F.pct(r.max_drawdown), 'v-red'],
+      ['ulcer', 'Ulcer Index', 'UI', F.pct(r.ulcer), 'v-blue'],
+      ['kurt', 'Kurtosis', 'Kurt', F.num(r.curtosis, 2), 'v-blue'],
+    ];
+    return `<h2 class="sr-only">Métricas de riesgo</h2><div class="metrics">${M.map(([k, t, sym, v, c]) => `<article class="metric" data-test="ratio-${k}">
+      <div class="metric-top"><h3>${t}<small>${sym}</small></h3>${infoBtn(k, t)}</div><p class="v ${c}" style="margin-bottom:0">${v}</p></article>`).join('')}</div>
+      <p class="fine">Calculadas con ${r.n_rentabilidades} rentabilidades diarias TWR (${F.date(d.inicio)} – ${F.date(d.fecha_datos)}). Con ~6 meses de historia son orientativas. Toca «i» para ver qué significa cada una.</p>`;
+  }
+  function infoListHtml(d) {
+    const days = Math.round((new Date(d.fecha_datos) - new Date(d.inicio)) / 864e5);
+    const m = Math.floor(days / 30.44), rest = Math.round(days - m * 30.44);
+    const nF = d.posiciones.filter((p) => p.id !== 'efectivo').length, hasCash = d.posiciones.some((p) => p.id === 'efectivo');
+    const plats = [...new Set(d.posiciones.map((p) => p.plataforma))];
+    const row = (ico, t, s, v) => `<div class="info-row"><div class="l"><span class="sec-ico">${ico}</span><div><div class="ttl">${t}</div><div class="s">${s}</div></div></div><div class="r">${v}</div></div>`;
+    return `<div class="info-list"><h2 class="label">Información cartera</h2><div style="margin-top:10px">
+      ${row(ICON.cal, 'Tiempo de inversión activa', 'invirtiendo desde el ' + F.date(d.inicio), `${m} meses${rest ? ' y ' + rest + ' días' : ''}`)}
+      ${row(ICON.layers, 'Activos en cartera', 'posiciones activas', `${nF} fondos${hasCash ? ' + liquidez' : ''}`)}
+      ${row(ICON.bank, 'Plataformas', plats.join(' · '), `${plats.length}`)}
+      ${row(ICON.clock, 'Datos a', 'último valor liquidativo', F.date(d.fecha_datos))}
+    </div></div>`;
+  }
+
+  /* ---------- KPIs ---------- */
+  function kpisHtml(d) {
+    const r = d.resumen, s = d.serie;
+    const flows = s.filter((p, k) => k === 0 ? p.i > 0 : p.i !== s[k - 1].i);
+    return `<section class="kpis" aria-label="Resumen">
+      <article class="kpi"><div class="kpi-top"><h2 class="label">Patrimonio total</h2><span class="ico ico-b">${ICON.euro}</span></div>
+        <p class="kv" style="margin-bottom:0">${F.eur(r.valor)}</p>
+        <p class="ks" style="margin-bottom:0" data-test="pl">${signed(r.pl, F.eurSigned)} vs aportado</p>
+        <p class="ks" style="margin:2px 0 0">Neto de comisiones (incl. ${F.eur(r.custodia_acum)} de custodia)</p></article>
+      <article class="kpi"><div class="kpi-top"><h2 class="label">Aportado a la cartera</h2><span class="ico ico-g">${ICON.wallet}</span></div>
+        <p class="kv" style="margin-bottom:0" data-test="invertido">${F.eur(r.invertido)}</p>
+        <div class="kpi-rows"><div><span>Aportaciones</span><b>${flows.length}</b></div><div><span>Fechas</span><span>${flows.map((p) => F.dateShort(p.f)).join(' · ')}</span></div><div><span>Liquidez incluida</span><span>${F.eur(r.efectivo)}</span></div></div></article>
+      <article class="kpi"><div class="kpi-top"><h2 class="label">Rentabilidad</h2><span class="kpi-ic">${infoBtn('neto', 'la rentabilidad neta')}<span class="ico ico-a">${ICON.target}</span></span></div>
+        <p class="kv" style="margin-bottom:0" data-test="plp">${signed(r.plp, F.pctSigned)} <span class="chip-note">neta</span></p>
+        <div class="kpi-rows"><div><span>TWR desde inicio</span><b data-test="twr">${signed(r.twr, F.pctSigned)}</b></div><div><span>TWR anualizada</span><b>${signed(r.twr_anual, F.pctSigned)}</b></div><div><span>Objetivo</span><span>sin definir</span></div></div></article>
     </section>`;
   }
+
+  /* ---------- Posiciones ---------- */
+  function marks(p) { return (p.estimado ? '<sup class="mark" title="Participaciones estimadas">†</sup>' : '') + (p.fecha_aprox ? '<sup class="mark" title="Fecha de compra aproximada">‡</sup>' : ''); }
+  function sparkSvg(vals, w = 84, h = 26) {
+    if (!vals || vals.length < 2) return `<svg class="spark" width="${w}" height="${h}" aria-hidden="true"><line x1="2" x2="${w - 2}" y1="${h / 2}" y2="${h / 2}" stroke="#10b981" stroke-width="1.6"/></svg>`;
+    const mn = Math.min(...vals), mx = Math.max(...vals), sp = mx - mn || 1;
+    const pts = vals.map((v, i) => `${(2 + (i / (vals.length - 1)) * (w - 4)).toFixed(1)},${(h - 3 - ((v - mn) / sp) * (h - 6)).toFixed(1)}`).join(' ');
+    const up = vals[vals.length - 1] >= vals[0];
+    return `<svg class="spark" width="${w}" height="${h}" aria-hidden="true"><polyline points="${pts}" fill="none" stroke="${up ? '#10b981' : '#f43f5e'}" stroke-width="1.6" stroke-linejoin="round"/></svg>`;
+  }
+  function positionsPanel(d) {
+    const tipos = [...new Set(d.posiciones.map((p) => p.tipo))];
+    return `<section class="panel" id="posiciones" tabindex="-1" aria-labelledby="h-pos">
+      <div class="tabs" role="presentation"><span class="tab">${ICON.brief}Posiciones activas <span class="badge">${d.posiciones.length}</span></span></div>
+      <div class="pos-h"><div><div class="sec-h"><span class="sec-ico">${ICON.brief}</span><h2 id="h-pos">Posiciones activas</h2></div>
+        <p class="sub">Fondos y liquidez de la cartera. Toca un fondo para ver todos sus datos.</p></div>
+        <div class="filters"><label class="search"><span class="sr-only">Buscar fondo, ISIN o plataforma</span>${ICON.search}<input id="q" type="search" placeholder="Buscar fondo o ISIN…" autocomplete="off" value="${esc(state.q)}"></label>
+        <label><span class="sr-only">Filtrar por tipo</span><select id="tipo"><option value="">Todos los tipos</option>${tipos.map((t) => `<option value="${esc(t)}">${esc(t)}</option>`).join('')}</select></label></div></div>
+      <div class="table-scroll" role="region" aria-label="Tabla de fondos, desliza en horizontal" tabindex="0" id="ftable"></div>
+      <div class="pos-foot"><p class="fine"><span class="mark">†</span> Participaciones estimadas (aportado / VL de compra). <span class="mark">‡</span> Fecha de compra aproximada, deducida por VL. «Desde compra» = valor − invertido de cada fondo (antes de la custodia externa). «Diario» = variación del último día del histórico (${F.date(d.fecha_datos)}). Tendencia: VL desde la compra.</p></div>
+    </section>`;
+  }
+  function drawTable() {
+    const d = state.data, q = state.q.trim().toLowerCase();
+    const key = { valor: 'valor', peso: 'valor', diario: 'diario', compra: 'plp' }[state.sort];
+    const list = d.posiciones.filter((p) => (!state.tipo || p.tipo === state.tipo) && (!q || [p.nombre, p.isin, p.plataforma, p.tipo].join(' ').toLowerCase().includes(q)))
+      .sort((a, b) => (b[key] ?? -1e9) - (a[key] ?? -1e9));
+    const th = (k, t) => `<th scope="col" ${state.sort === k ? 'aria-sort="descending"' : ''}><button type="button" data-sort="${k}">${t}${state.sort === k ? ' <span aria-hidden="true">▼</span>' : ''}</button></th>`;
+    const tot = list.reduce((a, p) => a + p.valor, 0), totW = list.reduce((a, p) => a + p.peso, 0);
+    $('#ftable').innerHTML = `<table class="ftable"><caption class="sr-only">Posiciones activas a ${F.date(d.fecha_datos)}</caption>
+      <thead><tr><th scope="col" class="first">Fondo / posición</th><th scope="col" class="l">Tipo</th><th scope="col">Cantidad</th><th scope="col">Precio actual</th>${th('valor', 'Valor en EUR')}${th('diario', 'Diario')}${th('compra', 'Desde compra')}${th('peso', 'Peso %')}<th scope="col">Tendencia</th></tr></thead>
+      <tbody>${list.length ? list.map((p) => `<tr data-test="pos-${esc(p.id)}">
+        <th scope="row" class="first"><button type="button" class="fname" data-pos="${esc(p.id)}" aria-label="${esc(p.nombre)}: ver detalle"><span class="nm">${esc(p.nombre)}</span>${marks(p)}<small>${p.isin ? esc(p.isin) + ' · ' : ''}${esc(p.plataforma)}</small></button></th>
+        <td class="l"><span class="pill k-${tk(p.tipo)}">${esc(p.tipo)}</span></td>
+        <td>${p.participaciones == null ? '—' : F.num(p.participaciones, p.participaciones < 100 ? 4 : 2)}${p.estimado ? '<span class="mark" aria-label="estimadas">†</span>' : ''}</td>
+        <td>${p.vl == null ? '—' : F.eur(p.vl, p.vl < 100 ? 4 : 2)}</td>
+        <td class="val">${F.eur(p.valor)}</td>
+        <td>${signed(p.diario, (x) => F.pctSigned(x))}</td>
+        <td>${signed(p.plp, (x) => F.pctSigned(x))}</td>
+        <td class="wt" data-test="peso">${F.pct(p.peso)}</td>
+        <td>${sparkSvg(p.spark)}</td></tr>`).join('') : '<tr class="empty-row"><td colspan="9">Ningún fondo coincide con la búsqueda.</td></tr>'}</tbody>
+      <tfoot><tr><th scope="row" class="first">Total ${list.length < d.posiciones.length ? '(filtrado)' : ''}</th><td></td><td></td><td></td><td>${F.eur(tot)}</td><td></td><td></td><td>${F.pct(totW)}</td><td></td></tr></tfoot></table>`;
+  }
+  function label(k) { const s = k.replace(/_/g, ' '); return s.charAt(0).toUpperCase() + s.slice(1); }
+  function openSheet(id) {
+    const p = state.data.posiciones.find((x) => x.id === id); if (!p) return;
+    const extra = [];
+    extra.push(['Tipo', p.tipo]); extra.push(['Plataforma', p.plataforma]);
+    if (p.isin) extra.push(['ISIN', p.isin + (p.codigo_dgs && p.codigo_dgs === p.isin ? ' (código DGS)' : '')]);
+    if (p.participaciones != null) extra.push(['Participaciones', F.num(p.participaciones, 4) + (p.estimado ? ' †' : '')]);
+    if (p.vl != null) extra.push(['VL actual', F.eur(p.vl, 4) + ' · ' + F.date(p.fecha_vl)]);
+    if (p.vl_compra != null) extra.push(['VL de compra', F.eur(p.vl_compra, 4)]);
+    extra.push(['Invertido', F.eur(p.invertido)]);
+    if (p.fecha_compra) extra.push(['Fecha de compra', F.date(p.fecha_compra) + (p.fecha_aprox ? ' ‡' : '') + (p.confianza ? ` (confianza ${p.confianza})` : '')]);
+    if (p.fecha_compra_nota) extra.push(['Nota de compra', p.fecha_compra_nota]);
+    if (p.ter != null) extra.push(['TER (gastos corrientes)', F.num(p.ter, 2) + ' %' + (p.ter_nota ? ' — ' + p.ter_nota : '')]);
+    if (p.custodia_externa != null) extra.push(['Custodia externa', F.num(p.custodia_externa, 2) + ' % anual']);
+    Object.entries(p.comisiones || {}).forEach(([k, v]) => { if (k !== 'fuente') extra.push(['Comisión: ' + label(k), v]); });
+    if (p.comisiones && p.comisiones.fuente) extra.push(['Fuente comisiones', p.comisiones.fuente]);
+    if (p.nota) extra.push(['Nota', p.nota]);
+    (p.avisos || []).forEach((a) => extra.push(['Aviso', a]));
+    $('#sheet-body').innerHTML = `<div class="sheet-top"><p class="dtag">${esc(p.tipo)} · ${esc(p.plataforma)}</p><button type="submit" class="icon-btn" value="close" aria-label="Cerrar detalle">✕</button></div><h2 id="sheet-title">${esc(p.nombre)}${marks(p)}</h2>
+      <div class="sheet-nums"><div><span>Valor</span><b>${F.eur(p.valor)}</b></div><div><span>Peso</span><b>${F.pct(p.peso)}</b></div><div><span>Desde compra</span><b class="nw">${signed(p.pl, F.eurSigned)}</b><b class="nw">${signed(p.plp, F.pctSigned)}</b></div></div>
+      ${p.spark && p.spark.length > 1 ? `<p class="label">VL desde la compra (${F.date(p.spark_desde)})</p>${sparkSvg(p.spark, 300, 60).replace('class="spark"', 'class="spark" style="width:100%;height:60px;margin:6px 0 10px" preserveAspectRatio="none" viewBox="0 0 300 60"')}` : ''}
+      <dl class="dl">${extra.map(([k, v]) => `<div><dt>${esc(k)}</dt><dd>${esc(v)}</dd></div>`).join('')}</dl>
+      ${p.fuente_vl ? `<p class="fine">Fuente del VL: <a href="${esc(p.fuente_vl)}" target="_blank" rel="noopener">${esc(new URL(p.fuente_vl).hostname)}</a></p>` : ''}`;
+    const dlg = $('#sheet'); dlg.showModal ? dlg.showModal() : dlg.setAttribute('open', ''); dlg.scrollTop = 0;
+  }
+
+  /* ---------- Mapa (treemap) ---------- */
+  function squarify(items, x, y, w, h) {
+    const out = []; const total = items.reduce((a, it) => a + it.v, 0); if (!total) return out;
+    let rest = items.map((it) => ({ ...it, a: (it.v / total) * w * h }));
+    const worst = (row, side) => { const s = row.reduce((a, r) => a + r.a, 0); const mx = Math.max(...row.map((r) => r.a)), mn = Math.min(...row.map((r) => r.a)); return Math.max((side * side * mx) / (s * s), (s * s) / (side * side * mn)); };
+    while (rest.length) {
+      const side = Math.min(w, h); let row = [rest[0]]; let i = 1;
+      while (i < rest.length && worst(row.concat(rest[i]), side) <= worst(row, side)) { row.push(rest[i]); i++; }
+      const s = row.reduce((a, r) => a + r.a, 0);
+      if (w >= h) { const cw = s / h; let cy = y; row.forEach((r) => { const ch = r.a / cw; out.push({ ...r, x, y: cy, w: cw, h: ch }); cy += ch; }); x += cw; w -= cw; }
+      else { const ch = s / w; let cx = x; row.forEach((r) => { const cw = r.a / ch; out.push({ ...r, x: cx, y, w: cw, h: ch }); cx += cw; }); y += ch; h -= ch; }
+      rest = rest.slice(i);
+    }
+    return out;
+  }
+  const PLAT_PAL = ['#3b82f6', '#8b5cf6', '#0ea5e9', '#f59e0b', '#10b981'];
+  function platColor(g) { const ps = [...new Set(state.data.posiciones.slice().sort((a, b) => b.valor - a.valor).map((p) => p.plataforma))]; return PLAT_PAL[Math.max(0, ps.indexOf(g)) % PLAT_PAL.length]; }
+  function vizPanel() {
+    return `<section class="panel" aria-labelledby="h-viz">
+      <div class="viz-h"><div><div class="sec-h"><span class="sec-ico">${ICON.bars}</span><h2 id="h-viz">Visualización de cartera</h2></div>
+        <p class="sub">Mapa de calor: el tamaño es el peso en la cartera y el color, la rentabilidad.</p></div>
+        <div class="toggle" role="group" aria-label="Agrupar por"><button type="button" data-tm="tipo" aria-pressed="true">Tipo activo</button><button type="button" data-tm="fondo" aria-pressed="false">Fondo</button><button type="button" data-tm="plataforma" aria-pressed="false">Plataforma</button></div></div>
+      <div class="viz-body"><div class="viz-sub"><p class="label" style="margin:0">Mapa de calor</p>
+        <div class="toggle" role="group" aria-label="Color según"><button type="button" data-tmc="compra" aria-pressed="true">Desde compra</button><button type="button" data-tmc="diario" aria-pressed="false">Último día</button></div></div>
+        <div class="assoc" id="assoc"></div>
+        <div class="tmap" id="tmap" role="img"></div>
+        <p class="tmap-note" style="margin-top:10px">Toca un recuadro para ver el detalle del fondo. Los fondos muy pequeños (p. ej. la liquidez) apenas se ven: están en la tabla.</p></div>
+    </section>`;
+  }
+  function drawTreemap() {
+    const d = state.data, host = $('#tmap'); host.innerHTML = '';
+    const W = host.clientWidth, H = host.clientHeight; const metric = state.tmColor === 'diario' ? 'diario' : 'plp';
+    const [t1, t2] = metric === 'diario' ? [0.0025, 0.0075] : [0.01, 0.05];
+    const pos = d.posiciones.filter((p) => p.valor > 0).slice().sort((a, b) => b.valor - a.valor);
+    const groupKey = state.tm === 'tipo' ? (p) => p.tipo : state.tm === 'plataforma' ? (p) => p.plataforma : null;
+    const tile = (p, r, parent) => {
+      const el = document.createElement('button'); el.type = 'button';
+      const area = r.w * r.h; el.className = 'tile ' + tint(p[metric], t1, t2) + (r.w < 46 || r.h < 34 ? ' tiny' : (r.h < 62 || r.w < 66) ? ' noname small' : area < 9000 ? ' small' : '');
+      Object.assign(el.style, { left: r.x + 2 + 'px', top: r.y + 2 + 'px', width: Math.max(0, r.w - 4) + 'px', height: Math.max(0, r.h - 4) + 'px' });
+      el.dataset.pos = p.id;
+      el.setAttribute('aria-label', `${p.nombre}: peso ${F.pct(p.peso)}, ${metric === 'diario' ? 'último día' : 'desde compra'} ${F.pctSigned(p[metric])}. Ver detalle`);
+      el.innerHTML = `<span class="tn">${esc(p.nombre)}</span><span class="tr"><span>${F.pct(p.peso, 1)}</span><span class="tp">${F.pctSigned(p[metric], metric === 'diario' ? 2 : 1).replace('\u00a0%', '%')}</span></span>`;
+      parent.appendChild(el);
+    };
+    if (!groupKey) {
+      squarify(pos.map((p) => ({ v: p.valor, p })), 0, 0, W, H).forEach((r) => tile(r.p, r, host));
+    } else {
+      const groups = {}; pos.forEach((p) => { (groups[groupKey(p)] = groups[groupKey(p)] || []).push(p); });
+      const items = Object.entries(groups).map(([g, ps]) => ({ g, ps, v: ps.reduce((a, p) => a + p.valor, 0) })).sort((a, b) => b.v - a.v);
+      squarify(items, 0, 0, W, H).forEach((r) => {
+        const box = document.createElement('div'); box.className = 'tgroup';
+        const col = state.tm === 'tipo' ? K_COLOR[tk(r.ps[0].tipo)] : platColor(r.g);
+        Object.assign(box.style, { left: r.x + 3 + 'px', top: r.y + 3 + 'px', width: Math.max(0, r.w - 6) + 'px', height: Math.max(0, r.h - 6) + 'px', borderColor: col + '99', background: col + '0d' });
+        const gw = r.ps.reduce((a, p) => a + p.peso, 0);
+        const small = r.w < 60 || r.h < 50;
+        box.innerHTML = small ? '' : `<div class="gh"><span>${esc(r.g)}</span><span>${r.ps.length} pos · ${F.pct(gw, 1)}</span></div><div class="inner"></div>`;
+        if (small) box.style.padding = '2px';
+        host.appendChild(box);
+        const inner = small ? box : box.querySelector('.inner');
+        const iw = small ? r.w - 10 : r.w - 14, ih = small ? r.h - 10 : r.h - 6 - 30;
+        squarify(r.ps.map((p) => ({ v: p.valor, p })), 0, 0, Math.max(0, iw), Math.max(0, ih)).forEach((t) => tile(t.p, t, inner));
+      });
+    }
+    host.setAttribute('aria-label', `Mapa de calor por ${state.tm === 'tipo' ? 'tipo de activo' : state.tm}: ` + pos.map((p) => `${p.nombre} ${F.pct(p.peso, 1)}`).join(', '));
+    const assocItems = state.tm === 'fondo' ? [] : Object.entries(pos.reduce((a, p) => { const k = groupKey(p); a[k] = (a[k] || 0) + p.peso; return a; }, {}));
+    $('#assoc').innerHTML = `<span class="label" style="margin-right:4px">${state.tm === 'fondo' ? 'Color' : 'Grupos'}:</span>` + (assocItems.length
+      ? assocItems.map(([k, w]) => `<span class="chipk"><i style="background:${state.tm === 'tipo' ? K_COLOR[tk(k)] : platColor(k)}"></i>${esc(k)} <b>${F.pct(w, 1)}</b></span>`).join('')
+      : `<span class="chipk"><i style="background:#991b1b"></i>pérdida</span><span class="chipk"><i style="background:#15803d"></i>ganancia</span><span class="chipk">tramos ${metric === 'diario' ? '0,25% / 0,75%' : '1% / 5%'}</span>`);
+  }
+
+  /* ---------- Explicaciones ---------- */
   function infoText(key) {
-    const d = state.data, r = d.ratios, lr = d.libre_riesgo, b = d.benchmark;
+    const d = state.data, r = d.ratios, lr = d.libre_riesgo, b = d.benchmark, v = d.resumen.valor;
     const comp = b.componentes.map((c) => `<li><b>${esc(c.clase)}</b>: ${esc(c.nombre)} (${esc(c.ticker)})</li>`).join('');
+    const shortH = `<p class="fine">Historial corto (${r.n_rentabilidades} días): dato orientativo.</p>`;
     const T = {
-      neto: ['Resultado neto', `<p>Es el dinero ganado o perdido sobre lo que habéis aportado: <b>valor actual − custodia acumulada − invertido</b>.</p><p>El valor de cada fondo ya descuenta sus gastos (TER), y además se resta la custodia de Renta 4 para el fondo de Fidelity (${F.eur(d.resumen.custodia_acum)} hasta ahora).</p><p>El porcentaje se calcula sobre el total invertido (${F.eur(d.resumen.invertido)}).</p>`],
-      twr: ['Rentabilidad TWR', `<p>La rentabilidad <b>ponderada por tiempo</b> mide cómo lo han hecho las inversiones sin que influya cuándo entró el dinero.</p><p>Aquí es ${F.pctSigned(d.resumen.twr)}, frente al ${F.pctSigned(d.resumen.plp)} de la rentabilidad neta. Difieren porque la TWR da el mismo peso a cada periodo aunque al principio hubiera menos dinero invertido (las aportaciones llegaron en varias fechas). Anualizada: ${F.pctSigned(d.resumen.twr_anual)}.</p><p>Es la base de todos los ratios.</p>`],
-      vol: ['Volatilidad anualizada', `<p>Indica cuánto sube y baja el valor de un día para otro, llevado a un año. Cuanto más alta, más «sustos».</p><p>${F.pct(r.volatilidad)} es baja: más de la mitad de la cartera está en monetario y renta fija. Como referencia, la bolsa mundial suele moverse entre el 12 % y el 20 %.</p><p class="fine">Cálculo: desviación típica de las rentabilidades diarias TWR × √252. Coincide con el dato de Cartera Family (${F.num(r.volatilidad_fuente_pct, 2)} %).</p>`],
-      sharpe: ['Ratio de Sharpe', `<p>Mide cuánto se gana <b>por encima de un activo sin riesgo</b> por cada unidad de riesgo asumido. Por encima de 1 es bueno; negativo significa que en este periodo habría rendido más dejar el dinero al tipo sin riesgo.</p><p>Tipo sin riesgo: <b>${esc(lr.nombre)}</b>, media ${F.num(lr.medio_pct, 3)} % (entre ${F.num(lr.min_pct, 3)} % y ${F.num(lr.max_pct, 3)} %) del ${F.date(lr.desde)} al ${F.date(lr.hasta)}. En el periodo habría rendido ${F.pctSigned(r.rf_total)}.</p><p class="fine">Cálculo: media diaria de (rentabilidad − €STR) × 252 / volatilidad anualizada. Fuente: <a href="${esc(lr.web)}" target="_blank" rel="noopener">BCE, serie ${esc(lr.serie)}</a>.</p>`],
-      alfa: ['Alfa anual', `<p>Lo que la cartera ha ganado (o perdido) <b>de más respecto a lo que cabía esperar</b> por el mercado, ya descontado su nivel de riesgo (beta). Positivo = los fondos elegidos lo han hecho mejor que el índice equivalente.</p><p>${F.pctSigned(r.alfa_anual)} anualizado: en estos meses la selección de fondos ha ido por detrás del benchmark (que hizo ${F.pctSigned(r.benchmark_total)} frente al ${F.pctSigned(d.resumen.twr)} de la cartera).</p><p><b>Benchmark</b>: ${esc(b.descripcion)}</p><ul>${comp}</ul><p class="fine">Pesos hoy: ${esc(b.pesos_hoy_txt)}. Precios: ${esc(b.fuente_precios)}. Cálculo: regresión de los excesos diarios sobre el €STR; alfa diaria × 252. Con ~6 meses de datos el alfa es muy sensible y orientativa.</p>`],
-      beta: ['Beta', `<p>Cuánto se mueve la cartera cuando se mueve el mercado de referencia: 1 = igual; 0,5 = la mitad.</p><p>Beta ${F.num(r.beta, 2)} frente al benchmark equivalente y ${F.num(r.beta_msci_acwi, 2)} frente a la bolsa mundial (MSCI ACWI) sola.</p><p>El R² es ${F.num(r.r2, 2)}: solo una parte pequeña de los movimientos diarios se explica por el benchmark. Es normal con fondos de gestión activa y de estilo «value» y con valores liquidativos que no cierran a la misma hora que la bolsa alemana.</p><p class="fine">Benchmark: ${esc(b.pesos_hoy_txt)}. Regresión diaria; orientativa por el historial corto.</p>`],
-      dd: ['Máximo drawdown', `<p>La <b>mayor caída</b> desde un máximo hasta el punto más bajo posterior. Responde a «¿cuánto he llegado a perder desde lo más alto?».</p><p>${F.pct(r.max_drawdown)}: del máximo del ${F.dateLong(r.max_dd_pico)} al ${F.dateLong(r.max_dd_valle)}${r.max_dd_valle === d.fecha_datos ? ', que es el último dato: la caída sigue abierta' : ''}.</p><p class="fine">Calculado sobre el índice TWR, así que las aportaciones no lo distorsionan. Coincide con Cartera Family (${F.num(r.max_dd_fuente_pct, 2)} %).</p>`],
+      neto: ['Rentabilidad neta', 'Neta', `<p>Dinero ganado o perdido sobre lo aportado: <b>valor actual − custodia acumulada − aportado</b>.</p><p>El valor de cada fondo ya descuenta sus gastos (TER) y además se resta la custodia de Renta 4 del fondo indexado (${F.eur(d.resumen.custodia_acum)} hasta ahora). El porcentaje es sobre lo aportado (${F.eur(d.resumen.invertido)}).</p><p>No hay rentabilidad objetivo definida, así que no se muestra ninguna barra de objetivo.</p>`],
+      twr: ['Rentabilidad TWR', 'TWR', `<p>La rentabilidad <b>ponderada por tiempo</b> mide cómo lo han hecho las inversiones sin que influya cuándo entró el dinero.</p><p>Es ${F.pctSigned(d.resumen.twr)} (anualizada ${F.pctSigned(d.resumen.twr_anual)}), frente al ${F.pctSigned(d.resumen.plp)} de la rentabilidad neta. Difieren porque la TWR da el mismo peso a cada periodo aunque al principio hubiera menos dinero invertido.</p><p>Los porcentajes de los periodos (1 día, 1 sem., …) y del calendario son TWR. Es la base de todas las métricas.</p>`],
+      vol: ['Volatilidad', 'σ ann', `<p>Cuánto oscila la cartera de un día para otro, llevado a un año. A más volatilidad, más vaivenes por el camino.</p><p>${F.pct(r.volatilidad)} es baja: más de la mitad de la cartera está en monetario y renta fija. La bolsa mundial suele moverse entre el 12 % y el 20 %.</p><p class="fine">Desviación típica de las rentabilidades diarias TWR × √252. Coincide con Cartera Family (${F.num(r.volatilidad_fuente_pct, 2)} %).</p>`],
+      sharpe: ['Ratio de Sharpe', 'SR', `<p>Rentabilidad <b>por encima del tipo sin riesgo</b> por cada unidad de riesgo. Por encima de 1 se considera bueno; negativo significa que en este periodo habría rendido más dejar el dinero al tipo sin riesgo.</p><p>Tipo sin riesgo: <b>${esc(lr.nombre)}</b>, media ${F.num(lr.medio_pct, 3)} % del ${F.date(lr.desde)} al ${F.date(lr.hasta)} (habría rendido ${F.pctSigned(r.rf_total)} en el periodo).</p><p class="fine">Media diaria de (rentabilidad − €STR) × 252 / volatilidad anualizada. Fuente: <a href="${esc(lr.web)}" target="_blank" rel="noopener">BCE, serie ${esc(lr.serie)}</a>.</p>${shortH}`],
+      sortino: ['Ratio de Sortino', 'Sortino', `<p>Como el Sharpe, pero <b>solo penaliza las caídas</b>: la volatilidad de los días en que la cartera rinde menos que el €STR. Los días buenos no cuentan como «riesgo».</p><p>${F.num(r.sortino, 2)}: negativo porque en el periodo la cartera ha rendido menos que el €STR.</p><p class="fine">Exceso medio anualizado / desviación a la baja anualizada (objetivo = €STR).</p>${shortH}`],
+      alfa: ['Alfa anual', 'α ann', `<p>Lo que la cartera añade (o resta) <b>sobre lo que explicaría su beta</b> frente al benchmark. Positivo = los fondos elegidos lo han hecho mejor que un índice equivalente.</p><p>${F.pctSigned(r.alfa_anual)} anualizado (el benchmark hizo ${F.pctSigned(r.benchmark_total)} frente al ${F.pctSigned(d.resumen.twr)} de la cartera).</p><p><b>Benchmark</b>: ${esc(b.descripcion)}</p><ul>${comp}</ul><p class="fine">Pesos hoy: ${esc(b.pesos_hoy_txt)}. Precios: ${esc(b.fuente_precios)}. Regresión de los excesos diarios sobre el €STR; alfa diaria × 252.</p>${shortH}`],
+      beta: ['Beta', 'β', `<p>Sensibilidad al mercado: 1 = se mueve igual que el benchmark; menos de 1, más suave.</p><p>${F.num(r.beta, 2)} frente al benchmark equivalente y ${F.num(r.beta_msci_acwi, 2)} frente a la bolsa mundial (MSCI ACWI) sola. R² ${F.num(r.r2, 2)}: solo una parte de los movimientos diarios se explica por el benchmark, algo normal con fondos de gestión activa y de estilo «value» y con valores liquidativos que no cierran a la misma hora que la bolsa alemana.</p>${shortH}`],
+      var: ['Pérdida en un día malo', 'VaR 95', `<p>El 95 % de los días la cartera <b>no perdió más de ${F.pct(Math.abs(r.var95))}</b> en un día. Con el valor actual equivale a unos ${F.eur(Math.abs(r.var95) * v, 0)}.</p><p class="fine">Método histórico: percentil 5 de las ${r.n_rentabilidades} rentabilidades diarias TWR.</p>${shortH}`],
+      cvar: ['Pérdida en días extremos', 'CVaR 95', `<p>Pérdida <b>media del 5 % de los peores días</b> (${r.n_cola} días): ${F.pct(r.cvar95)}, unos ${F.eur(Math.abs(r.cvar95) * v, 0)} con el valor actual.</p><p>Peor día del periodo: ${F.date(r.peor_dia.f)} (${F.pctSigned(r.peor_dia.r)}). Mejor día: ${F.date(r.mejor_dia.f)} (${F.pctSigned(r.mejor_dia.r)}).</p>${shortH}`],
+      dd: ['Peor racha', 'MDD', `<p>Mayor caída desde un máximo hasta el mínimo posterior: ${F.pct(r.max_drawdown)}, del ${F.dateLong(r.max_dd_pico)} al ${F.dateLong(r.max_dd_valle)}${r.max_dd_valle === d.fecha_datos ? ' (último dato: la caída sigue abierta)' : ''}.</p><p class="fine">Sobre el índice TWR, así que las aportaciones no lo distorsionan. Coincide con Cartera Family (${F.num(r.max_dd_fuente_pct, 2)} %).</p>`],
+      ulcer: ['Ulcer Index', 'UI', `<p>«Dolor» acumulado del inversor: combina <b>la profundidad y la duración</b> de las caídas desde máximos en un solo número. Cuanto más bajo, más tranquilo el camino.</p><p>${F.pct(r.ulcer)}: caídas pequeñas en general.</p><p class="fine">Raíz de la media de los drawdowns al cuadrado del índice TWR, día a día.</p>`],
+      kurt: ['Kurtosis', 'Kurt', `<p>Indica si los días extremos (muy buenos o muy malos) son más frecuentes de lo que predice una campana de Gauss, que tiene curtosis 3.</p><p>${F.num(r.curtosis, 2)} (exceso ${F.num(r.exceso_curtosis, 2)}): ${r.curtosis > 3.5 ? 'colas algo más «gordas» de lo normal; hay más días extremos de lo esperado.' : r.curtosis >= 2.5 ? 'cerca de lo normal.' : 'menos días extremos de lo normal.'} Asimetría ${F.num(r.asimetria, 2)}.</p><p class="fine">Curtosis de Pearson de las rentabilidades diarias TWR.</p>${shortH}`],
     };
     return T[key];
   }
 
-  /* ---------- Posiciones ---------- */
-  function sorted(d) {
-    const k = { peso: 'valor', valor: 'valor', pl: 'pl', plp: 'plp' }[state.sort];
-    return d.posiciones.slice().sort((a, b) => b[k] - a[k]);
-  }
-  function marks(p) { return (p.estimado ? '<sup class="mark" title="Participaciones estimadas">†</sup>' : '') + (p.fecha_aprox ? '<sup class="mark" title="Fecha de compra aproximada">‡</sup>' : ''); }
-  function label(k) { const s = k.replace(/_/g, ' '); return s.charAt(0).toUpperCase() + s.slice(1); }
-  function positionsCard(d) {
-    return `<section class="card" id="posiciones" aria-labelledby="h-pos" tabindex="-1">
-      <div class="card-head"><h2 id="h-pos">Posiciones activas</h2>
-        <div class="seg" role="group" aria-label="Vista"><button data-view="cards" aria-pressed="true">Tarjetas</button><button data-view="table" aria-pressed="false">Tabla</button></div></div>
-      <div class="sortbar" role="group" aria-label="Ordenar por"><span class="muted" aria-hidden="true">Ordenar:</span>
-        <button data-sort="peso" aria-pressed="true">Peso</button><button data-sort="pl" aria-pressed="false">Resultado €</button><button data-sort="plp" aria-pressed="false">Resultado %</button></div>
-      <div id="pos-body"></div>
-      <p class="fine"><sup>†</sup> Participaciones estimadas (aportado / VL de compra). <sup>‡</sup> Fecha de compra aproximada, deducida por VL. El resultado de cada fondo es valor − invertido (bruto de la custodia externa).</p>
-    </section>`;
-  }
-  function drawPositions() {
-    const d = state.data, list = sorted(d), host = $('#pos-body');
-    if (state.view === 'cards') {
-      host.innerHTML = `<ul class="pos-list">${list.map((p) => {
-        const extra = [];
-        if (p.isin) extra.push(['ISIN', p.isin + (p.codigo_dgs && p.codigo_dgs === p.isin ? ' (código DGS)' : '')]);
-        if (p.participaciones != null) extra.push(['Participaciones', F.num(p.participaciones, 4) + (p.estimado ? ' †' : '')]);
-        if (p.vl != null) extra.push(['VL actual', F.eur(p.vl, 4) + ' · ' + F.date(p.fecha_vl)]);
-        if (p.vl_compra != null) extra.push(['VL de compra', F.eur(p.vl_compra, 4)]);
-        extra.push(['Invertido', F.eur(p.invertido)]);
-        if (p.fecha_compra) extra.push(['Fecha de compra', F.date(p.fecha_compra) + (p.fecha_aprox ? ' ‡' : '') + (p.confianza ? ` (confianza ${p.confianza})` : '')]);
-        if (p.fecha_compra_nota) extra.push(['Nota de compra', p.fecha_compra_nota]);
-        if (p.ter != null) extra.push(['TER (gastos corrientes)', F.num(p.ter, 2) + ' %' + (p.ter_nota ? ' — ' + p.ter_nota : '')]);
-        if (p.custodia_externa != null) extra.push(['Custodia externa', F.num(p.custodia_externa, 2) + ' % anual']);
-        Object.entries(p.comisiones || {}).forEach(([k, v]) => { if (k !== 'fuente') extra.push(['Comisión: ' + label(k), v]); });
-        if (p.comisiones && p.comisiones.fuente) extra.push(['Fuente comisiones', p.comisiones.fuente]);
-        if (p.nota) extra.push(['Nota', p.nota]);
-        p.avisos.forEach((a) => extra.push(['Aviso', a]));
-        return `<li class="poscard" data-test="pos-${esc(p.id)}">
-          <div class="pos-head"><h3>${esc(p.nombre)}${marks(p)}</h3><span class="tag c-${p.clase}-soft">${esc(p.tipo)}</span></div>
-          <p class="pos-meta">${p.isin ? esc(p.isin) + ' · ' : ''}${esc(p.plataforma)}</p>
-          <div class="pos-nums">
-            <div><span class="lbl">Valor</span><b>${F.eur(p.valor)}</b></div>
-            <div><span class="lbl">Peso</span><b data-test="peso">${F.pct(p.peso)}</b></div>
-            <div><span class="lbl">Resultado</span><b>${signed(p.pl, F.eurSigned)}</b><span class="small">${signed(p.plp, F.pctSigned)}</span></div>
-          </div>
-          <div class="bar" role="presentation"><span class="c-${p.clase}" style="width:${Math.max(0.6, p.peso * 100).toFixed(2)}%"></span></div>
-          <details><summary>Más datos</summary><dl class="dl">${extra.map(([k, v]) => `<div><dt>${esc(k)}</dt><dd>${esc(v)}</dd></div>`).join('')}</dl>
-          ${p.fuente_vl ? `<p class="fine">Fuente del VL: <a href="${esc(p.fuente_vl)}" target="_blank" rel="noopener">${esc(new URL(p.fuente_vl).hostname)}</a></p>` : ''}</details>
-        </li>`;
-      }).join('')}</ul>`;
-    } else {
-      const sortAttr = (k) => (state.sort === k ? 'aria-sort="descending"' : '');
-      const th = (k, t) => `<th scope="col" ${sortAttr(k)}><button data-sort="${k}">${t}${state.sort === k ? ' <span aria-hidden="true">▼</span>' : ''}</button></th>`;
-      host.innerHTML = `<div class="table-scroll" role="region" aria-label="Tabla de posiciones, desliza en horizontal" tabindex="0"><table class="pos-table">
-        <caption class="sr-only">Posiciones activas a ${F.date(d.fecha_datos)}, ordenadas por ${state.sort}</caption>
-        <thead><tr><th scope="col" class="sticky">Fondo</th><th scope="col">ISIN</th><th scope="col">Plataforma</th><th scope="col">Tipo</th><th scope="col" class="r">Particip.</th><th scope="col" class="r">VL actual</th><th scope="col">Fecha VL</th>
-        ${th('valor', 'Valor')}${th('peso', 'Peso')}<th scope="col" class="r">Invertido</th>${th('pl', 'Resultado €')}${th('plp', 'Resultado %')}<th scope="col" class="r">VL compra</th><th scope="col">Fecha compra</th><th scope="col" class="r">TER</th><th scope="col" class="r">Custodia ext.</th></tr></thead>
-        <tbody>${list.map((p) => `<tr><th scope="row" class="sticky">${esc(p.nombre)}${marks(p)}</th><td>${esc(p.isin || '—')}</td><td>${esc(p.plataforma)}</td><td>${esc(p.tipo)}</td>
-          <td class="r">${p.participaciones == null ? '—' : F.num(p.participaciones, 4)}${p.estimado ? ' †' : ''}</td><td class="r">${p.vl == null ? '—' : F.num(p.vl, 4)}</td><td>${F.date(p.fecha_vl)}</td>
-          <td class="r">${F.eur(p.valor)}</td><td class="r">${F.pct(p.peso)}</td><td class="r">${F.eur(p.invertido)}</td><td class="r">${signed(p.pl, F.eurSigned)}</td><td class="r">${signed(p.plp, F.pctSigned)}</td>
-          <td class="r">${p.vl_compra == null ? '—' : F.num(p.vl_compra, 4)}</td><td>${p.fecha_compra ? F.date(p.fecha_compra) + (p.fecha_aprox ? ' ‡' : '') : '—'}</td><td class="r">${p.ter == null ? '—' : F.num(p.ter, 2) + ' %'}</td><td class="r">${p.custodia_externa == null ? '—' : F.num(p.custodia_externa, 2) + ' %'}</td></tr>`).join('')}</tbody>
-        <tfoot><tr><th scope="row" class="sticky">Total</th><td colspan="6"></td><td class="r">${F.eur(list.reduce((a, p) => a + p.valor, 0))}</td><td class="r">100,00 %</td><td class="r">${F.eur(list.reduce((a, p) => a + p.invertido, 0))}</td><td colspan="6"></td></tr></tfoot>
-      </table></div>`;
-    }
-    document.querySelectorAll('[data-sort]').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.sort === state.sort)));
-  }
-
   /* ---------- Pie ---------- */
-  function footer(d) {
+  function footerHtml(d) {
     const b = d.benchmark, lr = d.libre_riesgo;
-    return `<footer class="card foot" aria-labelledby="h-foot"><h2 id="h-foot">Datos y avisos</h2>
+    return `<section class="card foot" aria-labelledby="h-foot"><h2 id="h-foot">Datos, fuentes y avisos</h2>
       <p>Datos a <b>${F.dateLong(d.fecha_datos)}</b>. ${esc(d.fecha_datos_nota || '')} Generado el ${esc(d.generado.replace('T', ' '))} (hora de Madrid).</p>
-      <ul>${d.avisos.map((a) => `<li>${esc(a)}</li>`).join('')}</ul>
-      <h3>Fuentes</h3>
-      <ul><li>Posiciones, histórico y comisiones: bot Cartera Family (VL de FT Markets, quefondos y las gestoras).</li>
+      <h3>Avisos</h3><ul>${d.avisos.map((a) => `<li>${esc(a)}</li>`).join('')}</ul>
+      <h3>Fuentes</h3><ul><li>Posiciones, histórico y comisiones: bot Cartera Family (VL de FT Markets, quefondos y las gestoras).</li>
       <li>Tipo sin riesgo: <a href="${esc(lr.web)}" target="_blank" rel="noopener">€STR, Banco Central Europeo</a>.</li>
       ${b.componentes.filter((c) => c.ticker !== '€STR').map((c) => `<li>Benchmark ${esc(c.clase.toLowerCase())}: ${esc(c.nombre)} — ${esc(b.fuente_precios)}.</li>`).join('')}</ul>
-      <p class="fine">${esc(d.ratios.metodo)}</p>
+      <h3>Método</h3><p class="fine" style="margin-top:0">${esc(d.ratios.metodo)}</p>
       <p class="fine">Uso personal e informativo; no es asesoramiento financiero.</p>
-      <button class="btn btn-ghost" data-lock="1">Bloquear y olvidar la contraseña en este iPhone</button>
-    </footer>`;
+      <button type="button" class="btn btn-danger" data-lock="1">Bloquear y olvidar la contraseña en este iPhone</button>
+    </section>`;
   }
 
   /* ---------- Montaje ---------- */
+  function openInfo(key) {
+    const [title, tag, body] = infoText(key); $('#info-title').textContent = title; $('#info-tag').textContent = tag; $('#info-body').innerHTML = body;
+    const dlg = $('#info'); dlg.showModal ? dlg.showModal() : dlg.setAttribute('open', '');
+  }
   function render(d) {
     state.data = d;
-    $('#fecha-chip').textContent = 'Datos a ' + F.date(d.fecha_datos);
     $('#lock-btn').hidden = false;
+    $('#foot-date').textContent = 'Datos a ' + F.date(d.fecha_datos);
     const app = $('#app');
-    app.innerHTML = hero(d) + chartCard() + ratios(d) + allocation(d) + positionsCard(d) + footer(d);
+    app.innerHTML = `<div class="page-h"><h1>Resumen de la cartera</h1><p>Histórico y métricas de la Cartera Family · datos a ${F.date(d.fecha_datos)}</p></div>`
+      + equityPanel(d) + kpisHtml(d) + positionsPanel(d) + vizPanel() + footerHtml(d);
     app.setAttribute('aria-busy', 'false');
-    drawChart(); drawPositions();
+    drawEquity(); drawTable(); drawTreemap();
     app.addEventListener('click', (ev) => {
       const t = ev.target.closest('button'); if (!t) return;
-      if (t.dataset.mode) { state.mode = t.dataset.mode; t.parentNode.querySelectorAll('button').forEach((b) => b.setAttribute('aria-pressed', String(b === t))); drawChart(); }
-      else if (t.dataset.range) { state.range = t.dataset.range; t.parentNode.querySelectorAll('button').forEach((b) => b.setAttribute('aria-pressed', String(b === t))); drawChart(); }
-      else if (t.dataset.view) { state.view = t.dataset.view; t.parentNode.querySelectorAll('button').forEach((b) => b.setAttribute('aria-pressed', String(b === t))); drawPositions(); }
+      if (t.dataset.view) { state.view = t.dataset.view; drawEquity(); }
+      else if (t.dataset.period) { state.period = t.dataset.period; if (state.view !== 'graph') state.view = 'graph'; drawEquity(); }
+      else if (t.dataset.ovl) { state.ovl[t.dataset.ovl] = !state.ovl[t.dataset.ovl]; t.setAttribute('aria-pressed', String(state.ovl[t.dataset.ovl])); drawEquity(); }
+      else if (t.dataset.month) { state.month = t.dataset.month; drawEquity(); const b = $(`[data-month="${state.month}"]`); b && b.focus(); }
+      else if (t.dataset.sort) { state.sort = t.dataset.sort; drawTable(); const b = $(`#ftable [data-sort="${state.sort}"]`); b && b.focus(); }
+      else if (t.dataset.pos) openSheet(t.dataset.pos);
+      else if (t.dataset.tm) { state.tm = t.dataset.tm; $$('[data-tm]').forEach((b) => b.setAttribute('aria-pressed', String(b === t))); drawTreemap(); }
+      else if (t.dataset.tmc) { state.tmColor = t.dataset.tmc; $$('[data-tmc]').forEach((b) => b.setAttribute('aria-pressed', String(b === t))); drawTreemap(); }
+      else if (t.dataset.info) openInfo(t.dataset.info);
       else if (t.dataset.lock) lock();
-      else if (t.dataset.sort) { state.sort = t.dataset.sort; drawPositions(); }
-      else if (t.dataset.info) { const [title, body] = infoText(t.dataset.info); $('#info-title').textContent = title; $('#info-body').innerHTML = body; const dlg = $('#info'); if (dlg.showModal) dlg.showModal(); else dlg.setAttribute('open', ''); }
     });
-    let rz; window.addEventListener('resize', () => { clearTimeout(rz); rz = setTimeout(drawChart, 150); });
+    $('#q').addEventListener('input', (ev) => { state.q = ev.target.value; drawTable(); });
+    $('#tipo').addEventListener('change', (ev) => { state.tipo = ev.target.value; drawTable(); });
+    let rz, lastW = window.innerWidth; window.addEventListener('resize', () => { if (window.innerWidth === lastW) return; lastW = window.innerWidth; clearTimeout(rz); rz = setTimeout(() => { drawEquity(); drawTreemap(); }, 150); });
   }
-  $('#info').addEventListener('click', (ev) => { if (ev.target.id === 'info') ev.target.close(); });
+  ['info', 'sheet'].forEach((id) => $('#' + id).addEventListener('click', (ev) => { if (ev.target.id === id) ev.target.close(); }));
 
   /* ---------- Desbloqueo ---------- */
   function lock() { CFCrypto.forget(); location.reload(); }
   function unlockScreen(env, msg) {
-    $('#fecha-chip').textContent = 'Datos cifrados';
+    $('#foot-date').textContent = 'Datos cifrados';
     const app = $('#app'); app.setAttribute('aria-busy', 'false');
-    app.innerHTML = `<section class="card unlock" aria-labelledby="h-unlock">
-      <div class="lock-ico" aria-hidden="true"><svg viewBox="0 0 24 24" width="30" height="30"><rect x="4.5" y="10.5" width="15" height="10" rx="2.5" fill="none" stroke="currentColor" stroke-width="2"/><path d="M8 10.5V8a4 4 0 0 1 8 0v2.5" fill="none" stroke="currentColor" stroke-width="2"/></svg></div>
+    app.innerHTML = `<div class="unlock-wrap"><section class="unlock" aria-labelledby="h-unlock">
+      <div class="logo" aria-hidden="true"><svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2"><rect x="4.5" y="10.5" width="15" height="10" rx="2.5"/><path d="M8 10.5V8a4 4 0 0 1 8 0v2.5"/></svg></div>
       <h1 id="h-unlock">Cartera protegida</h1>
-      <p class="muted">Los datos de la cartera están cifrados. Introduce la contraseña para verlos.</p>
+      <p class="sub">Los datos de la cartera están cifrados. Introduce la contraseña para verlos.</p>
       <form id="unlock-form" novalidate>
-        <label for="pw" class="field-label">Contraseña</label>
+        <label for="pw" class="field-label label">Contraseña</label>
         <div class="pw-row">
           <input id="pw" name="password" type="password" autocomplete="current-password" autocapitalize="off" autocorrect="off" spellcheck="false" required aria-describedby="pw-err" ${msg ? 'aria-invalid="true"' : ''}>
           <button type="button" id="pw-toggle" class="pw-toggle" aria-pressed="false" aria-label="Mostrar contraseña">Ver</button>
         </div>
         <p id="pw-err" class="err" role="alert">${msg ? esc(msg) : ''}</p>
         <label class="check"><input type="checkbox" id="remember" checked><span>Recordar en este iPhone</span></label>
-        <button class="btn" id="unlock-btn" type="submit">Desbloquear</button>
+        <button class="btn" id="unlock-btn" type="submit" style="margin-top:12px">Desbloquear</button>
       </form>
-      <p class="fine">El descifrado se hace solo en este dispositivo. Si marcas «Recordar», la clave se guarda en este iPhone hasta que pulses «Bloquear».</p>
-    </section>`;
+      <p class="fine">El descifrado se hace solo en este dispositivo (AES-256). Si marcas «Recordar», la clave se guarda en este iPhone hasta que pulses «Bloquear».</p>
+    </section></div>`;
     const pw = $('#pw'), btn = $('#unlock-btn');
     $('#pw-toggle').addEventListener('click', (ev) => { const show = pw.type === 'password'; pw.type = show ? 'text' : 'password'; ev.currentTarget.setAttribute('aria-pressed', String(show)); ev.currentTarget.textContent = show ? 'Ocultar' : 'Ver'; ev.currentTarget.setAttribute('aria-label', show ? 'Ocultar contraseña' : 'Mostrar contraseña'); });
     $('#unlock-form').addEventListener('submit', async (ev) => {
@@ -259,7 +431,7 @@
         const key = await CFCrypto.derive(pw.value, env);
         let data;
         try { data = await CFCrypto.decrypt(key, env); } catch (e) { throw new Error('bad'); }
-        if ($('#remember').checked) { try { await CFCrypto.remember(key, env); } catch (e) { /* sin almacenamiento: seguimos */ } }
+        if ($('#remember').checked) { try { await CFCrypto.remember(key, env); } catch (e) { /* sin almacenamiento */ } }
         pw.value = '';
         render(data);
       } catch (e) {
@@ -270,7 +442,6 @@
     });
     if (!msg) setTimeout(() => pw.focus(), 50);
   }
-
   async function start() {
     if (!CFCrypto.supported) throw new Error('Este navegador no permite descifrar los datos (WebCrypto). Ábrela en Safari con https');
     const r = await fetch('data/portfolio.enc.json', { cache: 'no-cache' });
