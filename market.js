@@ -8,6 +8,7 @@
   const FLAG = { us: ['🇺🇸', 'EE. UU.'], es: ['🇪🇸', 'España'], eu: ['🇪🇺', 'Zona euro'] };
   const flag = (p) => (FLAG[p] ? `<span class="flag" role="img" aria-label="${FLAG[p][1]}">${FLAG[p][0]}</span>` : '');
   const MESES = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'];
+  const DCORTO = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'];
   const DIAS = ['domingo', 'lunes', 'martes', 'miércoles', 'jueves', 'viernes', 'sábado'];
   const dmy = (iso) => (iso ? `${iso.slice(8, 10)}/${iso.slice(5, 7)}` : '—');
   const hm = (iso) => (iso && iso.length > 10 ? iso.slice(11, 16) : '');
@@ -158,8 +159,8 @@
   function agRange(a) { return st.agView === 'month' && a.mes ? a.mes : a.semana; }
   function agEvents(m) { return m.agenda.eventos.filter((e) => st.ag === 'all' || e.pais === st.ag); }
   function dayBtn(d, byDay, today, inMonth) {
-    const ev = byDay[d] || [], imp = ev.some((e) => e.importancia >= 3), sel = st.agDay === d;
-    const lab = `${cap(DIAS[new Date(d + 'T12:00:00Z').getUTCDay()])} ${dmy(d)}: ${ev.length ? ev.length + (ev.length === 1 ? ' evento' : ' eventos') : 'sin eventos'}${imp ? ', con eventos importantes' : ''}${d === today ? ' (hoy)' : ''}`;
+    const ev = byDay[d] || [], imp = ev.some((e) => e.clave), sel = st.agDay === d;
+    const lab = `${cap(DIAS[new Date(d + 'T12:00:00Z').getUTCDay()])} ${dmy(d)}: ${ev.length ? ev.length + (ev.length === 1 ? ' evento' : ' eventos') : 'sin eventos'}${imp ? ', con fecha clave' : ''}${d === today ? ' (hoy)' : ''}`;
     return `<button type="button" class="ag-d${d === today ? ' today' : ''}${ev.length ? '' : ' empty'}${d < today ? ' past' : ''}" data-ag-day="${d}" aria-pressed="${sel}" aria-expanded="${sel}" aria-controls="ag-panel" aria-label="${lab}">
         ${inMonth ? '' : `<span class="ag-dl">${DL[dowMon(d)]}</span>`}<span class="ag-dn">${+d.slice(8, 10)}</span><span class="ag-dot${imp ? ' on' : ''}" aria-hidden="true"></span></button>`;
   }
@@ -182,10 +183,15 @@
     const d = st.agDay, list = d ? byDay[d] || [] : [];
     const panel = d ? `<div class="ag-panel" id="ag-panel" data-test="ag-panel" data-day="${d}"><h4>${cap(DIAS[new Date(d + 'T12:00:00Z').getUTCDay()])} ${dmy(d)}${d === today ? ' <span class="chip-note">hoy</span>' : ''}</h4>
         ${list.length ? `<ul data-test="mk-agenda-list">${list.map((e) => evItem(e, now)).join('')}</ul>` : '<p class="empty">No hay eventos este día para este filtro.</p>'}</div>` : '<div id="ag-panel" hidden></div>';
-    const hitos = (a.hitos || []).filter((h) => h.fecha >= r0 && h.fecha <= r1 && (st.ag === 'all' || h.pais === st.ag));
+    /* v17: hitos = solo fechas clave con dato publicado (tipos, IPC general, empleo EE. UU., PIB), en una línea corta cada uno */
+    const inR = (h) => h.fecha.slice(0, 10) >= r0 && h.fecha.slice(0, 10) <= r1 && (st.ag === 'all' || h.pais === st.ag);
+    const hitos = (a.hitos || []).filter(inR), prox = (a.proximos || []).filter(inR);
+    const chip = (iso) => `<span class="h-d">${DCORTO[new Date(iso.slice(0, 10) + 'T12:00:00Z').getUTCDay()]} ${dmy(iso)}</span>`;
+    const scope = st.agView === 'month' ? 'este mes' : 'esta semana';
     const hb = `<div class="ag-hitos" data-test="ag-hitos"><h4>Hitos ${st.agView === 'month' ? 'del mes' : 'de la semana'}</h4>
-        ${hitos.length ? `<ul>${hitos.map((h) => `<li data-test="ag-hito" data-fecha="${h.fecha}" data-pais="${h.pais}">${flag(h.pais)}<span><b>${cap(DIAS[new Date(h.fecha + 'T12:00:00Z').getUTCDay()])} ${dmy(h.fecha)}:</b> ${esc(h.texto)}.</span></li>`).join('')}</ul>` : `<p class="empty">Todavía no hay datos publicados ${st.agView === 'month' ? 'este mes' : 'esta semana'} para este filtro.</p>`}
-        <p class="fine">Frases generadas automáticamente en cada actualización a partir del dato real publicado (solo eventos ya ocurridos).</p></div>`;
+        ${hitos.length ? `<ul class="hitos">${hitos.map((h) => `<li data-test="ag-hito" data-fecha="${h.fecha}" data-pais="${h.pais}">${chip(h.fecha)}<span class="h-t">${flag(h.pais)} ${esc(h.texto)}</span></li>`).join('')}</ul>` : `<p class="empty" data-test="ag-hitos-empty">Sin hitos publicados ${scope}.</p>`}
+        ${prox.length ? `<p class="h-sub">Próximas fechas clave</p><ul class="hitos prox">${prox.map((h) => `<li data-test="ag-prox" data-fecha="${h.fecha.slice(0, 10)}" data-pais="${h.pais}">${chip(h.fecha)}<span class="h-t">${flag(h.pais)} ${esc(h.texto)} <small>${hm(h.fecha)}</small></span></li>`).join('')}</ul>` : ''}
+      </div>`;
     return cal + panel + hb;
   }
   function chips(list, cur, attr, label) {
@@ -203,7 +209,7 @@
   function agendaHtml(m) {
     const a = m.agenda;
     return `<section class="panel mk-sec" aria-labelledby="h-mk-ag" data-test="mk-agenda"><div class="panel-pad">
-      ${secHead('h-mk-ag', ICO.cal, 'Agenda', 'Datos macro de EE. UU., España y la zona euro (IPC, empleo, tipos de interés, PIB…). <span class="ag-dot on" aria-hidden="true"></span> = día con eventos de importancia alta. Toca un día para ver sus eventos.', pillbar(['week', 'month'], st.agView, 'data-ag-view', 'Vista de la agenda'))}
+      ${secHead('h-mk-ag', ICO.cal, 'Agenda', 'Datos macro de EE. UU., España y la zona euro (IPC, empleo, tipos de interés, PIB…). <span class="ag-dot on" aria-hidden="true"></span> = fecha clave (tipos, IPC, empleo EE. UU., PIB). Toca un día para ver sus eventos.', pillbar(['week', 'month'], st.agView, 'data-ag-view', 'Vista de la agenda'))}
       ${stamp(a, a ? 'Fuente: ' + credit(a.fuente, a.fuente_url) + ' · horas de Madrid' : '')}
       <p class="ag-range" id="ag-range"></p>
       ${chips([['all', 'Todos'], ['us', '🇺🇸 EE. UU.'], ['es', '🇪🇸 España'], ['eu', '🇪🇺 Euro']], st.ag, 'data-ag-f', 'Filtrar agenda por país')}

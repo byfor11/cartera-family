@@ -520,3 +520,13 @@ main > * { min-width: 0; }
 .news-cards a { min-width: 0; overflow: hidden; }
 #mk-ag-box ~ .ag-leg { margin-top: 10px; }
 [data-test=mk-agenda] .mk-filter { gap: 3px; } [data-test=mk-agenda] .mk-filter button { padding: 0 8px; }
+
+/* ---------- v17: hitos compactos ---------- */
+.hitos { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; }
+.hitos li { display: flex; align-items: center; gap: 8px; font-size: 13px; line-height: 1.3; color: var(--text); min-width: 0; }
+.hitos .h-d { flex: none; min-width: 74px; padding: 2px 7px; border-radius: 7px; background: rgba(59, 130, 246, .14); border: 1px solid var(--blue-line2); color: var(--blue-t2); font: 700 10.5px var(--mono); text-align: center; }
+.hitos .h-t { min-width: 0; font-weight: 600; }
+.hitos.prox li { color: var(--text2); } .hitos.prox .h-d { background: transparent; color: var(--dim); border-color: var(--line2); } .hitos.prox .h-t { font-weight: 500; }
+.hitos small { font: 10.5px var(--mono); color: var(--dim); }
+.h-sub { margin: 10px 0 4px; font: 600 10px var(--mono); letter-spacing: .08em; text-transform: uppercase; color: var(--dim); }
+.ag-hitos .empty { margin: 0; }
