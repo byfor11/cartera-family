@@ -4,7 +4,7 @@
 (function () {
   const esc = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   const $ = (s, r = document) => r.querySelector(s), $$ = (s, r = document) => [...r.querySelectorAll(s)];
-  const st = { mk: '1m', fg: '1y', sec: '1d', news: 'all', ag: 'all', newsAll: false, m: null };
+  const st = { open: null, per: {}, fg: '1y', sec: '1d', news: 'all', ag: 'all', newsAll: false, m: null };
   const FLAG = { us: ['🇺🇸', 'EE. UU.'], es: ['🇪🇸', 'España'], eu: ['🇪🇺', 'Zona euro'] };
   const flag = (p) => (FLAG[p] ? `<span class="flag" role="img" aria-label="${FLAG[p][1]}">${FLAG[p][0]}</span>` : '');
   const DIAS = ['domingo', 'lunes', 'martes', 'miércoles', 'jueves', 'viernes', 'sábado'];
@@ -13,9 +13,11 @@
   const when = (iso) => (iso ? `${dmy(iso)}${hm(iso) ? ' ' + hm(iso) : ''}` : '—');
   const arrow = (x) => (x > 0 ? '▲' : x < 0 ? '▼' : '■');
   const sgn = (x) => (x == null ? 'zero' : F.sign(x));
-  const MK_P = [['1d', '1 día'], ['1w', '1 sem.'], ['1m', '1 mes'], ['ytd', 'YTD'], ['1y', '1 año']];
-  const SEC_P = [['1d', '1 día'], ['1w', '1 sem.'], ['1m', '1 mes'], ['3m', '3 meses'], ['ytd', 'YTD'], ['1y', '1 año']];
-  const FG_P = [['1m', '1 mes'], ['3m', '3 meses'], ['6m', '6 meses'], ['1y', '1 año']];
+  /* v14: etiquetas cortas de la barra de periodos (píldora) y nombre largo para lectores de pantalla */
+  const PN = { '1d': ['1D', '1 día'], '1w': ['1S', '1 semana'], '1m': ['1M', '1 mes'], '3m': ['3M', '3 meses'], '6m': ['6M', '6 meses'], ytd: ['YTD', 'en el año'], '1y': ['1A', '1 año'], '5y': ['5A', '5 años'] };
+  const MK_P = ['1d', '1w', '1m', '3m', 'ytd', '1y', '5y'];
+  const SEC_P = ['1d', '1w', '1m', '3m', 'ytd', '1y'];
+  const FG_P = ['1m', '3m', '6m', '1y'];
 
   function stamp(sec, extra) {
     if (!sec) return '';
@@ -23,11 +25,11 @@
     return `<p class="mk-stamp">${s}${extra ? ' · ' + extra : ''}</p>`;
   }
   function credit(name, url) { return `<a href="${esc(url)}" target="_blank" rel="noopener">${esc(name)}</a>`; }
-  function periodsHtml(list, cur, attr, label) {
-    return `<div class="periods mk-periods n${list.length}" role="group" aria-label="${label}">${list.map(([k, t]) => `<button type="button" ${attr}="${k}" aria-pressed="${k === cur}"><span class="pl">${t}</span></button>`).join('')}</div>`;
+  function pillbar(list, cur, attr, label, extra) {
+    return `<div class="pillbar" role="group" aria-label="${label}" ${extra || ''}>${list.map((k) => `<button type="button" ${attr}="${k}" aria-pressed="${k === cur}" aria-label="${PN[k][1]}" title="${PN[k][1]}">${PN[k][0]}</button>`).join('')}</div>`;
   }
-  function secHead(id, ico, title, sub) {
-    return `<div class="sec-h"><span class="sec-ico" aria-hidden="true">${ico}</span><h2 id="${id}">${title}</h2></div>${sub ? `<p class="sub">${sub}</p>` : ''}`;
+  function secHead(id, ico, title, sub, right) {
+    return `<div class="sec-row"><div class="sec-h"><span class="sec-ico" aria-hidden="true">${ico}</span><h2 id="${id}">${title}</h2></div>${right || ''}</div>${sub ? `<p class="sub">${sub}</p>` : ''}`;
   }
   const ICO = {
     idx: '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 3v18h18"/><path d="m7 15 4-4 3 3 5-6"/></svg>',
@@ -41,7 +43,7 @@
     if (v == null) return '—';
     if (it.tipo === 'rend') return F.num(v, 3) + '\u00a0%';
     const cur = it.id === 'sp500' ? (it.moneda === 'USD' ? '\u00a0$' : '\u00a0€') : '';
-    return F.num(v, 2) + cur;
+    return F.num(v, it.dec || 2) + cur;
   }
   function fmtChg(it, c) {
     if (c == null) return '—';
@@ -49,6 +51,8 @@
     return F.pctSigned(c);
   }
   function chgSpan(it, c) { return `<span class="${sgn(c)}"><span aria-hidden="true">${arrow(c)} </span>${fmtChg(it, c)}</span>`; }
+  const perOf = (it) => st.per[it.id] || '1m';
+  const perList = (it) => MK_P.filter((k) => k === '1d' || it.cambios[k]);
   function seriesFor(it, p) {
     if (p === '1d') {
       const intra = (it.intradia || []).filter((x) => x[0].slice(0, 10) === it.fecha);
@@ -58,47 +62,64 @@
     const c = it.cambios[p]; const from = c ? c.fecha_ref : it.serie[0][0];
     return { pts: it.serie.filter((x) => x[0] >= from), intra: false };
   }
+  /* v14: cuadros compactos (nombre, último dato y variación del día). Al tocar uno se despliega debajo, a todo el ancho,
+     su gráfico con la barra de periodos; al tocarlo otra vez se pliega. Solo hay uno desplegado a la vez. */
+  function tileHtml(it) {
+    const c = it.cambios['1d'], open = st.open === it.id;
+    return `<button type="button" class="mk-tile${open ? ' open' : ''}" data-mk-tile="${esc(it.id)}" data-test="mk-card-${esc(it.id)}" aria-expanded="${open}" aria-controls="mk-x-${esc(it.id)}">
+        <span class="mk-tn">${esc(it.nombre)}</span><b class="mk-tv" data-test="mk-last">${fmtVal(it, it.ultimo)}</b>
+        <span class="mk-td" data-test="mk-day">${chgSpan(it, c ? c.cambio : null)}<small> hoy</small></span>${it.stale ? '<span class="stale-dot" title="dato anterior">•</span>' : ''}
+        <span class="mk-chev" aria-hidden="true"></span></button>`
+      + `<div class="mk-x" id="mk-x-${esc(it.id)}" role="region" aria-label="Gráfico de ${esc(it.nombre)}" data-test="mk-x-${esc(it.id)}" ${open ? '' : 'hidden'}>${open ? expandedHtml(it) : ''}</div>`;
+  }
+  function expandedHtml(it) {
+    const p = perOf(it);
+    return `<div class="mk-xh"><div class="mk-name"><h3>${esc(it.nombre)}</h3><p>${esc(it.sub)}</p></div>
+        <div class="mk-last"><b>${fmtVal(it, it.ultimo)}</b><span class="mk-chg" data-test="mk-chg"></span></div></div>
+      <div class="mk-xbar">${pillbar(perList(it), p, 'data-mk-period', 'Periodo del gráfico de ' + esc(it.nombre), `data-mk-id="${esc(it.id)}"`)}</div>
+      <div class="mk-chart" data-chart="${esc(it.id)}"></div>
+      <p class="mk-src">${it.stale ? '<span class="stale-chip">dato anterior</span> ' : ''}Dato ${when(it.hora || it.fecha)}${it.estado && /REGULAR|OPEN/i.test(it.estado) ? ' · <span class="open">mercado abierto</span>' : ''} · Fuente: ${credit(it.fuente, it.fuente_url)}${it.nota ? ` · <span class="mk-note">${esc(it.nota)}</span>` : ''}</p>`;
+  }
   function indicesHtml(m) {
     const s = m.indices;
     if (!s) return `<section class="panel mk-sec" aria-labelledby="h-mk-idx"><div class="panel-pad">${secHead('h-mk-idx', ICO.idx, 'Índices de referencia')}<p class="empty">Sin datos de mercado todavía.</p></div></section>`;
     return `<section class="panel mk-sec" aria-labelledby="h-mk-idx" data-test="mk-indices"><div class="panel-pad">
-      ${secHead('h-mk-idx', ICO.idx, 'Índices de referencia', 'Último dato y evolución. En los bonos, la variación es en puntos básicos (pb = 0,01 puntos de rentabilidad).')}
+      ${secHead('h-mk-idx', ICO.idx, 'Índices de referencia', 'Toca un índice para ver su gráfico. En los bonos, la variación es en puntos básicos (pb = 0,01 puntos).')}
       ${stamp(s)}
-      ${periodsHtml(MK_P, st.mk, 'data-mk-period', 'Periodo de los índices')}
-      <div class="mk-grid" id="mk-grid">${s.items.map((it) => `<article class="mk-card" data-test="mk-card-${esc(it.id)}" aria-labelledby="mkt-${esc(it.id)}">
-        <div class="mk-top"><div class="mk-name"><h3 id="mkt-${esc(it.id)}">${it.pais ? flag(it.pais) + ' ' : ''}${esc(it.nombre)}</h3><p>${esc(it.sub)}</p></div>
-          <div class="mk-last"><b data-test="mk-last">${fmtVal(it, it.ultimo)}</b><span class="mk-chg" data-test="mk-chg"></span></div></div>
-        <div class="mk-chips" role="list">${MK_P.map(([k, t]) => { const c = it.cambios[k]; return `<div role="listitem" class="mk-chip${k === st.mk ? ' on' : ''}" data-k="${k}"><span>${t}</span>${chgSpan(it, c ? c.cambio : null)}</div>`; }).join('')}</div>
-        <div class="mk-chart" data-chart="${esc(it.id)}"></div>
-        <p class="mk-src">${it.stale ? '<span class="stale-chip">dato anterior</span> ' : ''}Dato ${when(it.hora || it.fecha)}${it.estado && /REGULAR|OPEN/i.test(it.estado) ? ' · <span class="open">mercado abierto</span>' : ''} · Fuente: ${credit(it.fuente, it.fuente_url)}${it.nota ? ` · <span class="mk-note">${esc(it.nota)}</span>` : ''}</p>
-      </article>`).join('')}</div>
+      <div class="mk-tiles" id="mk-grid">${s.items.map(tileHtml).join('')}</div>
     </div></section>`;
   }
   function drawIndices() {
     const s = st.m && st.m.indices; if (!s) return;
-    $$('[data-mk-period]').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.mkPeriod === st.mk)));
+    const grid = $('#mk-grid'); if (!grid) return;
     s.items.forEach((it) => {
-      const card = $(`[data-test="mk-card-${it.id}"]`); if (!card) return;
-      const c = it.cambios[st.mk];
-      card.querySelector('[data-test=mk-chg]').innerHTML = `${chgSpan(it, c ? c.cambio : null)}<small>${MK_P.find((x) => x[0] === st.mk)[1]}</small>`;
-      card.querySelectorAll('.mk-chip').forEach((ch) => ch.classList.toggle('on', ch.dataset.k === st.mk));
-      const { pts, intra } = seriesFor(it, st.mk);
-      const host = card.querySelector('.mk-chart');
-      if (pts.length < 2) { host.innerHTML = '<p class="empty">Sin datos suficientes para este periodo.</p>'; return; }
-      const dates = pts.map((x) => x[0]), vals = pts.map((x) => x[1]);
-      const ref = st.mk === '1d' && c ? c.ref : vals[0];
-      const dir = sgn(vals[vals.length - 1] - ref);
-      const delta = (v) => (it.tipo === 'rend' ? (v - ref) * 100 : v / ref - 1);
-      const lab = (d) => (intra ? hm(d) : F.date(d));
-      lineChart(host, {
-        dates, h: 150, nTicks: 3, padL: 50,
-        series: [{ label: it.nombre, values: vals, cls: 'mk mk-' + dir, endDot: true, endCls: 'mk-' + dir }],
-        xFmt: (d) => (intra ? hm(d) : F.dateShort(d)),
-        yFmt: (y, step) => { const dec = it.tipo === 'rend' ? (step < 0.01 ? 3 : 2) : step < 1 ? 2 : step < 10 ? 1 : 0; return F.num(y, dec) + (it.tipo === 'rend' ? '%' : ''); },
-        tipHtml: (i) => `<strong>${lab(dates[i])}</strong><span>${esc(it.nombre)}: <b>${fmtVal(it, vals[i])}</b></span><span>Desde ${intra ? 'el cierre anterior' : F.date(dates[0])}: <b class="${sgn(delta(vals[i]))}">${fmtChg(it, delta(vals[i]))}</b></span>`,
-        tipText: (i) => `${lab(dates[i])}. ${it.nombre} ${fmtVal(it, vals[i])}. Variación ${fmtChg(it, delta(vals[i]))}.`,
-        ariaLabel: `${it.nombre}: evolución ${MK_P.find((x) => x[0] === st.mk)[1]}, de ${fmtVal(it, vals[0])} a ${fmtVal(it, vals[vals.length - 1])} (${fmtChg(it, c ? c.cambio : delta(vals[vals.length - 1]))}).`,
-      });
+      const open = st.open === it.id, tile = grid.querySelector(`[data-mk-tile="${it.id}"]`), x = $('#mk-x-' + it.id);
+      tile.setAttribute('aria-expanded', String(open)); tile.classList.toggle('open', open);
+      if (!open) { x.hidden = true; x.innerHTML = ''; return; }
+      x.hidden = false; x.innerHTML = expandedHtml(it); drawChart(it, x);
+    });
+  }
+  function drawChart(it, x) {
+    const p = perOf(it), c = it.cambios[p], name = PN[p][1];
+    x.querySelector('[data-test=mk-chg]').innerHTML = `${chgSpan(it, c ? c.cambio : null)}<small>${name}</small>`;
+    $$('[data-mk-period]', x).forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.mkPeriod === p)));
+    const { pts, intra } = seriesFor(it, p);
+    const host = x.querySelector('.mk-chart');
+    if (pts.length < 2) { host.innerHTML = '<p class="empty">Sin datos suficientes para este periodo.</p>'; return; }
+    const dates = pts.map((q) => q[0]), vals = pts.map((q) => q[1]);
+    const ref = p === '1d' && c ? c.ref : vals[0];
+    const dir = sgn(vals[vals.length - 1] - ref);
+    const delta = (v) => (it.tipo === 'rend' ? (v - ref) * 100 : v / ref - 1);
+    const lab = (d) => (intra ? hm(d) : F.date(d));
+    const long = p === '5y' || (p === 'ytd' && dates.length > 300);
+    lineChart(host, {
+      dates, h: 170, nTicks: 3, padL: 52,
+      series: [{ label: it.nombre, values: vals, cls: 'mk mk-' + dir, endDot: true, endCls: 'mk-' + dir }],
+      xFmt: (d) => (intra ? hm(d) : long ? d.slice(5, 7) + '/' + d.slice(2, 4) : F.dateShort(d)),
+      yFmt: (y, step) => { const dec = it.tipo === 'rend' ? (step < 0.01 ? 3 : 2) : it.dec && step < 0.01 ? 4 : step < 0.1 ? 3 : step < 1 ? 2 : step < 10 ? 1 : 0; return F.num(y, dec) + (it.tipo === 'rend' ? '%' : ''); },
+      tipHtml: (i) => `<strong>${lab(dates[i])}</strong><span>${esc(it.nombre)}: <b>${fmtVal(it, vals[i])}</b></span><span>Desde ${intra ? 'el cierre anterior' : F.date(dates[0])}: <b class="${sgn(delta(vals[i]))}">${fmtChg(it, delta(vals[i]))}</b></span>`,
+      tipText: (i) => `${lab(dates[i])}. ${it.nombre} ${fmtVal(it, vals[i])}. Variación ${fmtChg(it, delta(vals[i]))}.`,
+      ariaLabel: `${it.nombre}: evolución en ${name}, de ${fmtVal(it, vals[0])} a ${fmtVal(it, vals[vals.length - 1])} (${fmtChg(it, c ? c.cambio : delta(vals[vals.length - 1]))}).`,
     });
   }
 
@@ -172,12 +193,11 @@
     if (!s) return `<section class="panel mk-sec" aria-labelledby="h-mk-fg"><div class="panel-pad">${secHead('h-mk-fg', ICO.fg, 'Sentimiento de mercado')}<p class="empty">Sin datos.</p></div></section>`;
     const prev = [['cierre', 'Cierre anterior'], ['1w', 'Hace 1 semana'], ['1m', 'Hace 1 mes'], ['1y', 'Hace 1 año']];
     return `<section class="panel mk-sec" aria-labelledby="h-mk-fg" data-test="mk-fg"><div class="panel-pad">
-      ${secHead('h-mk-fg', ICO.fg, 'Sentimiento de mercado · Fear &amp; Greed', 'Índice de miedo y codicia de CNN (0 = miedo extremo, 100 = codicia extrema), calculado con 7 indicadores del mercado de EE. UU.')}
+      ${secHead('h-mk-fg', ICO.fg, 'Sentimiento · Fear &amp; Greed', 'Índice de miedo y codicia de CNN (0 = miedo extremo, 100 = codicia extrema), calculado con 7 indicadores del mercado de EE. UU. La barra de periodos cambia el histórico.', pillbar(FG_P, st.fg, 'data-fg-period', 'Periodo del histórico Fear & Greed'))}
       ${stamp(s, 'Dato ' + when(s.hora))}
       <div class="fg-top"><div class="fg-gauge">${gauge(s.valor)}<p class="fg-v"><b data-test="fg-value" class="${fgZone(s.valor)}">${F.num(s.valor, 0)}</b><span data-test="fg-label">${esc(s.etiqueta)}</span></p></div>
         <div class="fg-prev" role="list">${prev.map(([k, t]) => { const v = s.anterior[k]; return `<div role="listitem" data-test="fg-prev-${k}"><span>${t}</span><b class="${v == null ? '' : fgZone(v)}">${v == null ? '—' : F.num(v, 0)}</b><small>${v == null ? '' : fgLabel(v)}</small></div>`; }).join('')}</div></div>
-      <h3 class="mk-h3">Histórico</h3>
-      ${periodsHtml(FG_P, st.fg, 'data-fg-period', 'Periodo del histórico Fear & Greed')}
+      <h3 class="mk-h3">Histórico <span class="fg-per" id="fg-per"></span></h3>
       <div id="fg-chart" class="fg-chart"></div>
       <p class="mk-src">Fuente: ${credit(s.fuente, s.fuente_url)}. Gráfico redibujado con los datos públicos del índice.</p>
     </div></section>`;
@@ -187,6 +207,7 @@
     $$('[data-fg-period]').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.fgPeriod === st.fg)));
     const last = s.serie[s.serie.length - 1][0], d = new Date(last + 'T12:00:00Z');
     const back = { '1m': 1, '3m': 3, '6m': 6, '1y': 12 }[st.fg]; d.setUTCMonth(d.getUTCMonth() - back);
+    $('#fg-per').textContent = '· ' + PN[st.fg][1];
     const from = d.toISOString().slice(0, 10); const pts = s.serie.filter((x) => x[0] >= from);
     const dates = pts.map((x) => x[0]), vals = pts.map((x) => x[1]);
     lineChart($('#fg-chart'), {
@@ -205,9 +226,8 @@
     const s = m.sectores;
     if (!s) return `<section class="panel mk-sec" aria-labelledby="h-mk-sec"><div class="panel-pad">${secHead('h-mk-sec', ICO.sec, 'Rentabilidad por sectores')}<p class="empty">Sin datos.</p></div></section>`;
     return `<section class="panel mk-sec" aria-labelledby="h-mk-sec" data-test="mk-sectors"><div class="panel-pad">
-      ${secHead('h-mk-sec', ICO.sec, 'Rentabilidad por sectores', 'Los 11 sectores de la bolsa de EE. UU., ordenados de mejor a peor en el periodo elegido.')}
+      ${secHead('h-mk-sec', ICO.sec, 'Sectores', 'Rentabilidad de los 11 sectores de la bolsa de EE. UU., de mejor a peor en el periodo elegido.', pillbar(SEC_P, st.sec, 'data-sec-period', 'Periodo de los sectores'))}
       ${stamp(s)}
-      ${periodsHtml(SEC_P, st.sec, 'data-sec-period', 'Periodo de los sectores')}
       <div id="sec-bars"></div>
       <p class="mk-src">Fuente: ${credit(s.fuente, s.fuente_url)}.</p>
     </div></section>`;
@@ -217,7 +237,7 @@
     $$('[data-sec-period]').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.secPeriod === st.sec)));
     const list = s.items.filter((x) => x[st.sec] != null).sort((a, b) => b[st.sec] - a[st.sec]);
     const mx = Math.max(...list.map((x) => Math.abs(x[st.sec])), 0.0001);
-    $('#sec-bars').innerHTML = `<ol class="bars" data-test="sec-bars" aria-label="Rentabilidad por sector, ${SEC_P.find((x) => x[0] === st.sec)[1]}">${list.map((x) => {
+    $('#sec-bars').innerHTML = `<ol class="bars" data-test="sec-bars" aria-label="Rentabilidad por sector, ${PN[st.sec][1]}">${list.map((x) => {
       const v = x[st.sec], w = (Math.abs(v) / mx) * 100;
       return `<li data-sector="${esc(x.nombre_orig)}"><span class="bn" title="${esc(x.nombre_orig)}">${esc(x.nombre)}</span><span class="bt" aria-hidden="true"><span class="bneg">${v < 0 ? `<i style="width:${w.toFixed(1)}%"></i>` : ''}</span><span class="bpos">${v > 0 ? `<i style="width:${w.toFixed(1)}%"></i>` : ''}</span></span><b class="bv ${sgn(v)}" data-test="sec-val">${F.pctSigned(v)}</b></li>`;
     }).join('')}</ol>`;
@@ -235,7 +255,11 @@
     root.addEventListener('click', (ev) => {
       const t = ev.target.closest('button'); if (!t) return;
       const refocus = (sel) => { const b = $(sel); b && b.focus(); };
-      if (t.dataset.mkPeriod) { st.mk = t.dataset.mkPeriod; drawIndices(); refocus(`[data-mk-period="${st.mk}"]`); }
+      if (t.dataset.mkTile) { const id = t.dataset.mkTile; st.open = st.open === id ? null : id; drawIndices(); refocus(`[data-mk-tile="${id}"]`); }
+      else if (t.dataset.mkPeriod) {
+        const id = t.closest('[data-mk-id]').dataset.mkId, it = st.m.indices.items.find((q) => q.id === id);
+        st.per[id] = t.dataset.mkPeriod; drawChart(it, $('#mk-x-' + id)); refocus(`#mk-x-${id} [data-mk-period="${st.per[id]}"]`);
+      }
       else if (t.dataset.fgPeriod) { st.fg = t.dataset.fgPeriod; drawFg(); refocus(`[data-fg-period="${st.fg}"]`); }
       else if (t.dataset.secPeriod) { st.sec = t.dataset.secPeriod; drawSec(); refocus(`[data-sec-period="${st.sec}"]`); }
       else if (t.dataset.newsF) { st.news = t.dataset.newsF; st.newsAll = false; $('#mk-news-box').innerHTML = newsList(st.m); $$('[data-news-f]').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.newsF === st.news))); }
