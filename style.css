@@ -326,10 +326,10 @@ p.big { margin: 4px 0 0; }
 /* ===================== v13: pestañas y «Actualidad» ===================== */
 .nav button { display: inline-flex; align-items: center; gap: 8px; padding: 8px 14px; min-height: 40px; border-radius: 10px; font-size: 12px; font-weight: 600; letter-spacing: .02em; background: transparent; color: var(--text2); border: 1px solid transparent; cursor: pointer; }
 .nav button[aria-current="page"] { background: rgba(59, 130, 246, .12); color: var(--blue-t2); border-color: var(--blue-line2); }
-.apptabs { position: sticky; top: calc(64px + env(safe-area-inset-top)); z-index: 40; display: grid; grid-template-columns: 1fr 1fr; gap: 6px; padding: 6px; margin: 12px 0 2px; background: rgba(13, 17, 27, .92); -webkit-backdrop-filter: blur(10px); backdrop-filter: blur(10px); border: 1px solid var(--blue-line2); border-radius: 14px; }
+.apptabs { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; padding: 4px; background: rgba(13, 17, 27, .92); border: 1px solid var(--blue-line2); border-radius: 13px; width: 100%; }
 .apptabs button { min-height: 44px; border-radius: 11px; border: 1px solid var(--line); background: #111520; color: var(--text2); font: 600 13px var(--sans); display: inline-flex; align-items: center; justify-content: center; gap: 8px; cursor: pointer; }
 .apptabs button[aria-selected="true"] { border-color: var(--blue); background: #12224a; color: var(--blue-t2); box-shadow: 0 0 0 1px rgba(59, 130, 246, .35); font-weight: 700; }
-@media (min-width: 820px) { .apptabs { max-width: 420px; } }
+
 #tab-actualidad > * + * { margin-top: 14px; }
 .mk-sec .sec-h + .sub { margin-top: 6px; }
 .mk-stamp { margin: 8px 0 10px; font: 11px var(--mono); color: var(--dim); }
@@ -410,7 +410,6 @@ main > * { min-width: 0; }
 #tab-cartera > *, #tab-actualidad > * { min-width: 0; }
 #tab-cartera[hidden], #tab-actualidad[hidden] { display: none; }
 #tab-actualidad > * + * { margin-top: 0; }
-.apptabs { margin: -8px 0 -4px; }
 
 /* ---------- v14: cuadros de índices + acordeón + barra de periodos (píldora) ---------- */
 .sec-row { display: flex; align-items: center; justify-content: space-between; gap: 8px 12px; flex-wrap: wrap; }
@@ -464,3 +463,60 @@ main > * { min-width: 0; }
 .fg-v .fg-chg b { display: inline; font: 700 12.5px var(--mono); }
 .fg-v .fg-chg b.pos, .fg-prev b.chg.pos, .fine b.pos { color: var(--green-t); } .fg-v .fg-chg b.neg, .fg-prev b.chg.neg, .fine b.neg { color: #fb7185; }
 .fg-prev b.chg { background: none; border: 0; padding: 0; box-shadow: none; border-radius: 0; }
+
+/* ---------- v16: pestañas solo arriba, dentro de la cabecera fija ---------- */
+.nav.tabs-on { display: flex; }
+.apptabs button { min-height: 40px; font-size: 12.5px; }
+@media (max-width: 819px) {
+  .topbar.has-tabs .wrap { flex-wrap: wrap; height: auto; row-gap: 0; }
+  .topbar.has-tabs .brand, .topbar.has-tabs .top-right { height: 60px; }
+  .topbar.has-tabs .nav { order: 3; flex: 1 0 100%; padding: 0 0 8px; }
+}
+@media (min-width: 820px) {
+  .topbar.has-tabs .nav { flex: 0 1 380px; }
+}
+
+/* ---------- v16: noticias en tarjetas pequeñas ---------- */
+.news-cards { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+@media (min-width: 700px) { .news-cards { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+@media (min-width: 1100px) { .news-cards { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
+.news-cards li { min-width: 0; display: flex; }
+.news-cards a { flex: 1; display: flex; flex-direction: column; justify-content: space-between; gap: 8px; min-height: 96px; padding: 10px 11px; border-radius: 12px; background: var(--card); border: 1px solid var(--line); color: var(--text); text-decoration: none; }
+.news-cards a:hover, .news-cards a:focus-visible { border-color: var(--blue-line); }
+.news-cards .nt { font-size: 12.5px; font-weight: 600; line-height: 1.32; display: -webkit-box; -webkit-line-clamp: 4; -webkit-box-orient: vertical; overflow: hidden; }
+.news-cards .nmeta { font: 9.5px/1.3 var(--mono); color: var(--dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.news-cards .nmeta b { color: var(--blue-t2); font-weight: 600; }
+.news-cards .flag { font-size: 11px; }
+
+/* ---------- v16: agenda por días (semana / mes) + hitos ---------- */
+.ag-range { margin: 0 0 6px; font: 600 12px var(--mono); color: var(--text2); }
+.ag-week, .ag-mg { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 5px; margin-top: 8px; }
+.ag-mh { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 5px; margin-top: 8px; font: 600 10px var(--mono); color: var(--dim); text-align: center; }
+.ag-d { position: relative; min-width: 0; min-height: 58px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; padding: 4px 0 8px; border-radius: 12px; border: 1px solid var(--line); background: var(--card); color: var(--text); cursor: pointer; }
+.ag-month .ag-d { min-height: 44px; padding: 2px 0 7px; border-radius: 10px; }
+.ag-d .ag-dl { font: 600 10px var(--mono); color: var(--dim); }
+.ag-d .ag-dn { font: 700 15px var(--mono); }
+.ag-month .ag-d .ag-dn { font-size: 13px; }
+.ag-d.empty { opacity: .55; }
+.ag-d.past .ag-dn { color: var(--text2); }
+.ag-d.today { border-color: var(--blue-line); }
+.ag-d.today .ag-dn { color: var(--blue-t2); }
+.ag-d[aria-pressed="true"] { background: var(--blue); border-color: var(--blue); opacity: 1; }
+.ag-d[aria-pressed="true"] .ag-dn, .ag-d[aria-pressed="true"] .ag-dl { color: #fff; }
+.ag-dot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; }
+.ag-d .ag-dot { position: absolute; bottom: 5px; left: 50%; margin-left: -3.5px; }
+.ag-month .ag-d .ag-dot { bottom: 4px; width: 6px; height: 6px; margin-left: -3px; }
+.ag-dot.on { background: #facc15; box-shadow: 0 0 0 1px rgba(0, 0, 0, .35); }
+.sub .ag-dot { vertical-align: 1px; }
+.ag-blank { min-height: 1px; }
+.ag-panel { margin-top: 10px; }
+.ag-panel h4, .ag-hitos h4 { font: 700 11px var(--mono); letter-spacing: .06em; text-transform: uppercase; color: var(--text2); margin: 0 0 6px; }
+.ag-panel ul { list-style: none; margin: 0; padding: 0; border: 1px solid var(--line); border-radius: 12px; overflow: hidden; }
+.ag-hitos { margin-top: 14px; padding: 10px 12px; border-radius: 12px; background: #0d1322; border: 1px solid var(--blue-line2); }
+.ag-hitos ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.ag-hitos li { display: flex; gap: 8px; align-items: flex-start; font-size: 12.5px; line-height: 1.4; color: var(--text2); }
+.ag-hitos li b { color: var(--text); }
+.ag-hitos .fine { margin: 8px 0 0; }
+.news-cards a { min-width: 0; overflow: hidden; }
+#mk-ag-box ~ .ag-leg { margin-top: 10px; }
+[data-test=mk-agenda] .mk-filter { gap: 3px; } [data-test=mk-agenda] .mk-filter button { padding: 0 8px; }

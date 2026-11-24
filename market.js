@@ -4,9 +4,10 @@
 (function () {
   const esc = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   const $ = (s, r = document) => r.querySelector(s), $$ = (s, r = document) => [...r.querySelectorAll(s)];
-  const st = { open: null, per: {}, fg: '1d', sec: '1d', news: 'all', ag: 'all', newsAll: false, m: null };
+  const st = { open: null, per: {}, fg: '1d', sec: '1d', news: 'all', ag: 'all', agView: 'week', agDay: null, newsAll: false, m: null };
   const FLAG = { us: ['🇺🇸', 'EE. UU.'], es: ['🇪🇸', 'España'], eu: ['🇪🇺', 'Zona euro'] };
   const flag = (p) => (FLAG[p] ? `<span class="flag" role="img" aria-label="${FLAG[p][1]}">${FLAG[p][0]}</span>` : '');
+  const MESES = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'];
   const DIAS = ['domingo', 'lunes', 'martes', 'miércoles', 'jueves', 'viernes', 'sábado'];
   const dmy = (iso) => (iso ? `${iso.slice(8, 10)}/${iso.slice(5, 7)}` : '—');
   const hm = (iso) => (iso && iso.length > 10 ? iso.slice(11, 16) : '');
@@ -14,7 +15,7 @@
   const arrow = (x) => (x > 0 ? '▲' : x < 0 ? '▼' : '■');
   const sgn = (x) => (x == null ? 'zero' : F.sign(x));
   /* v14: etiquetas cortas de la barra de periodos (píldora) y nombre largo para lectores de pantalla */
-  const PN = { '1d': ['1D', '1 día'], '1w': ['1S', '1 semana'], '1m': ['1M', '1 mes'], '3m': ['3M', '3 meses'], '6m': ['6M', '6 meses'], ytd: ['YTD', 'en el año'], '1y': ['1A', '1 año'], '5y': ['5A', '5 años'] };
+  const PN = { week: ['Semana', 'Semana'], month: ['Mes', 'Mes'], '1d': ['1D', '1 día'], '1w': ['1S', '1 semana'], '1m': ['1M', '1 mes'], '3m': ['3M', '3 meses'], '6m': ['6M', '6 meses'], ytd: ['YTD', 'en el año'], '1y': ['1A', '1 año'], '5y': ['5A', '5 años'] };
   const MK_P = ['1d', '1w', '1m', '3m', 'ytd', '1y', '5y'];
   const SEC_P = ['1d', '1w', '1m', '3m', 'ytd', '1y'];
   const FG_P = ['1d', '1w', '1m', '3m', '6m', '1y'];
@@ -32,6 +33,7 @@
     return `<div class="sec-row"><div class="sec-h"><span class="sec-ico" aria-hidden="true">${ico}</span><h2 id="${id}">${title}</h2></div>${right || ''}</div>${sub ? `<p class="sub">${sub}</p>` : ''}`;
   }
   const ICO = {
+    cal: '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/></svg>',
     idx: '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 3v18h18"/><path d="m7 15 4-4 3 3 5-6"/></svg>',
     news: '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M7 8h10M7 12h10M7 16h6"/></svg>',
     fg: '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 16a8 8 0 0 1 16 0"/><path d="m12 16 4-5"/></svg>',
@@ -131,46 +133,91 @@
     return F.num(v, Math.min(dec, (String(v).split('.')[1] || '').length || 1)) + (u === '%' ? '\u00a0%' : u === 'K' ? 'K' : u === 'M' ? 'M' : u === 'B' ? 'B' : '');
   }
   const CATL = { tipos: 'Tipos', 'inflación': 'IPC', empleo: 'Empleo', pib: 'PIB' };
+  /* v16: noticias en tarjetas pequeñas (solo titular + fuente/hora), dos por fila en móvil; al tocar se abre la noticia */
   function newsList(m) {
     const s = m.noticias; if (!s) return '<p class="empty">Sin noticias.</p>';
     const list = s.items.filter((n) => st.news === 'all' || n.pais === st.news);
     const shown = st.newsAll ? list : list.slice(0, 8);
-    return `<ul class="news" data-test="mk-news-list">${shown.map((n) => `<li data-pais="${esc(n.pais)}"><a href="${esc(n.url)}" target="_blank" rel="noopener"><span class="nmeta">${flag(n.pais)} <b>${esc(n.fuente)}</b> · ${when(n.fecha)}${n.stale ? ' · anterior' : ''}</span><span class="nt">${esc(n.titulo)}</span>${n.resumen ? `<span class="ns">${esc(n.resumen)}</span>` : ''}</a></li>`).join('') || '<li class="empty">No hay noticias para este filtro.</li>'}</ul>
+    return `<ul class="news-cards" data-test="mk-news-list">${shown.map((n) => `<li data-pais="${esc(n.pais)}"><a href="${esc(n.url)}" target="_blank" rel="noopener" title="${esc(n.resumen || n.titulo)}"><span class="nt">${esc(n.titulo)}</span><span class="nmeta">${flag(n.pais)} <b>${esc(n.fuente)}</b> · ${n.fecha && n.fecha.slice(0, 10) === (m.generado || '').slice(0, 10) ? hm(n.fecha) : when(n.fecha)}${n.stale ? ' · anterior' : ''}</span></a></li>`).join('') || '<li class="empty">No hay noticias para este filtro.</li>'}</ul>
       ${list.length > 8 ? `<button type="button" class="ovl more" data-news-more="1" aria-expanded="${st.newsAll}">${st.newsAll ? 'Ver menos' : `Ver ${list.length - 8} más`}</button>` : ''}`;
   }
-  function agendaList(m) {
-    const s = m.agenda; if (!s) return '<p class="empty">Sin agenda.</p>';
-    const now = (m.generado || '').slice(0, 16);
-    const ev = s.eventos.filter((e) => st.ag === 'all' || e.pais === st.ag);
-    const days = {}; ev.forEach((e) => (days[e.fecha.slice(0, 10)] = days[e.fecha.slice(0, 10)] || []).push(e));
-    const today = now.slice(0, 10);
-    return `<div class="agenda" data-test="mk-agenda-list">${Object.keys(days).sort().map((d) => {
-      const dow = DIAS[new Date(d + 'T12:00:00Z').getUTCDay()];
-      return `<div class="ag-day${d === today ? ' today' : ''}"><h4>${dow} ${dmy(d)}${d === today ? ' <span class="chip-note">hoy</span>' : ''}</h4><ul>${days[d].map((e) => {
-        const past = e.fecha.slice(0, 16) <= now; const has = e.actual != null;
-        const cls = has && e.mejor != null ? (e.mejor ? 'pos' : 'neg') : '';
-        return `<li class="ev${past ? ' past' : ' next'}" data-pais="${e.pais}">
+  function evItem(e, now) {
+    const past = e.fecha.slice(0, 16) <= now; const has = e.actual != null;
+    const cls = has && e.mejor != null ? (e.mejor ? 'pos' : 'neg') : '';
+    return `<li class="ev${past ? ' past' : ' next'}" data-pais="${e.pais}">
           <div class="ev-t"><span class="ev-h">${e.todo_el_dia || e.provisional ? 'Día' : hm(e.fecha)}</span>${flag(e.pais)}</div>
           <div class="ev-b"><p class="ev-n"><span title="${esc(e.nombre_orig)}">${esc(e.nombre)}</span>${e.categoria ? ` <span class="ev-cat c-${esc(e.categoria.normalize('NFD').replace(/[\u0300-\u036f]/g, ''))}">${CATL[e.categoria]}</span>` : ''}<span class="imp" aria-label="importancia ${e.importancia} de 3">${'●'.repeat(e.importancia)}${'○'.repeat(Math.max(0, 3 - e.importancia))}</span></p>
           <p class="ev-v">${has ? `<span>Real <b class="${cls}">${fmtEv(e.actual, e.unidad)}</b></span>` : past ? '<span class="dim">Sin dato</span>' : '<span class="nx">Próximo</span>'}<span>Prev. <b>${fmtEv(e.prevision, e.unidad)}</b></span><span>Ant. <b>${fmtEv(e.anterior, e.unidad)}</b></span></p></div></li>`;
-      }).join('')}</ul></div>`;
-    }).join('') || '<p class="empty">No hay eventos para este filtro.</p>'}</div>`;
+  }
+  /* v16: agenda por días. Semana = tira horizontal L…D; Mes = calendario. Punto amarillo = día con algún evento de importancia alta.
+     Al tocar un día se despliegue debajo lo que hay (o lo que ya hubo, con el dato real); al tocarlo otra vez se pliega. */
+  const DL = ['L', 'M', 'X', 'J', 'V', 'S', 'D'];
+  const isoAdd = (iso, n) => { const d = new Date(iso + 'T12:00:00Z'); d.setUTCDate(d.getUTCDate() + n); return d.toISOString().slice(0, 10); };
+  const dowMon = (iso) => (new Date(iso + 'T12:00:00Z').getUTCDay() + 6) % 7;
+  const cap = (t) => t.charAt(0).toUpperCase() + t.slice(1);
+  function agRange(a) { return st.agView === 'month' && a.mes ? a.mes : a.semana; }
+  function agEvents(m) { return m.agenda.eventos.filter((e) => st.ag === 'all' || e.pais === st.ag); }
+  function dayBtn(d, byDay, today, inMonth) {
+    const ev = byDay[d] || [], imp = ev.some((e) => e.importancia >= 3), sel = st.agDay === d;
+    const lab = `${cap(DIAS[new Date(d + 'T12:00:00Z').getUTCDay()])} ${dmy(d)}: ${ev.length ? ev.length + (ev.length === 1 ? ' evento' : ' eventos') : 'sin eventos'}${imp ? ', con eventos importantes' : ''}${d === today ? ' (hoy)' : ''}`;
+    return `<button type="button" class="ag-d${d === today ? ' today' : ''}${ev.length ? '' : ' empty'}${d < today ? ' past' : ''}" data-ag-day="${d}" aria-pressed="${sel}" aria-expanded="${sel}" aria-controls="ag-panel" aria-label="${lab}">
+        ${inMonth ? '' : `<span class="ag-dl">${DL[dowMon(d)]}</span>`}<span class="ag-dn">${+d.slice(8, 10)}</span><span class="ag-dot${imp ? ' on' : ''}" aria-hidden="true"></span></button>`;
+  }
+  function agendaBox(m) {
+    const a = m.agenda; if (!a) return '<p class="empty">Sin agenda.</p>';
+    const now = (m.generado || '').slice(0, 16), today = now.slice(0, 10);
+    const ev = agEvents(m), byDay = {};
+    ev.forEach((e) => (byDay[e.fecha.slice(0, 10)] = byDay[e.fecha.slice(0, 10)] || []).push(e));
+    const [r0, r1] = agRange(a);
+    let cal;
+    if (st.agView === 'month') {
+      const lead = dowMon(r0), cells = [];
+      for (let i = 0; i < lead; i++) cells.push('<span class="ag-blank" aria-hidden="true"></span>');
+      for (let d = r0; d <= r1; d = isoAdd(d, 1)) cells.push(dayBtn(d, byDay, today, true));
+      cal = `<div class="ag-month" data-test="ag-month"><div class="ag-mh" aria-hidden="true">${DL.map((x) => `<span>${x}</span>`).join('')}</div><div class="ag-mg">${cells.join('')}</div></div>`;
+    } else {
+      const days = []; for (let d = r0; d <= r1; d = isoAdd(d, 1)) days.push(d);
+      cal = `<div class="ag-week" data-test="ag-week">${days.map((d) => dayBtn(d, byDay, today, false)).join('')}</div>`;
+    }
+    const d = st.agDay, list = d ? byDay[d] || [] : [];
+    const panel = d ? `<div class="ag-panel" id="ag-panel" data-test="ag-panel" data-day="${d}"><h4>${cap(DIAS[new Date(d + 'T12:00:00Z').getUTCDay()])} ${dmy(d)}${d === today ? ' <span class="chip-note">hoy</span>' : ''}</h4>
+        ${list.length ? `<ul data-test="mk-agenda-list">${list.map((e) => evItem(e, now)).join('')}</ul>` : '<p class="empty">No hay eventos este día para este filtro.</p>'}</div>` : '<div id="ag-panel" hidden></div>';
+    const hitos = (a.hitos || []).filter((h) => h.fecha >= r0 && h.fecha <= r1 && (st.ag === 'all' || h.pais === st.ag));
+    const hb = `<div class="ag-hitos" data-test="ag-hitos"><h4>Hitos ${st.agView === 'month' ? 'del mes' : 'de la semana'}</h4>
+        ${hitos.length ? `<ul>${hitos.map((h) => `<li data-test="ag-hito" data-fecha="${h.fecha}" data-pais="${h.pais}">${flag(h.pais)}<span><b>${cap(DIAS[new Date(h.fecha + 'T12:00:00Z').getUTCDay()])} ${dmy(h.fecha)}:</b> ${esc(h.texto)}.</span></li>`).join('')}</ul>` : `<p class="empty">Todavía no hay datos publicados ${st.agView === 'month' ? 'este mes' : 'esta semana'} para este filtro.</p>`}
+        <p class="fine">Frases generadas automáticamente en cada actualización a partir del dato real publicado (solo eventos ya ocurridos).</p></div>`;
+    return cal + panel + hb;
   }
   function chips(list, cur, attr, label) {
     return `<div class="toggle sm mk-filter" role="group" aria-label="${label}">${list.map(([k, t]) => `<button type="button" ${attr}="${k}" aria-pressed="${k === cur}">${t}</button>`).join('')}</div>`;
   }
   function newsHtml(m) {
-    const n = m.noticias, a = m.agenda;
+    const n = m.noticias;
     return `<section class="panel mk-sec" aria-labelledby="h-mk-news" data-test="mk-news"><div class="panel-pad">
-      ${secHead('h-mk-news', ICO.news, 'Noticias y agenda', 'Titulares de mercados y los datos macro de la semana en EE. UU. y España (IPC, empleo, tipos de interés, PIB…).')}
-      <h3 class="mk-h3">Noticias</h3>${stamp(n, n ? 'Fuentes: ' + n.fuentes.map((f) => credit(f.nombre, f.url) + (f.ok ? '' : ' (sin actualizar)')).join(', ') : '')}
+      ${secHead('h-mk-news', ICO.news, 'Noticias', 'Titulares de mercados de España y EE. UU. Toca una noticia para abrirla en su web.')}
+      ${stamp(n, n ? 'Fuentes: ' + n.fuentes.map((f) => credit(f.nombre, f.url) + (f.ok ? '' : ' (sin actualizar)')).join(', ') : '')}
       ${chips([['all', 'Todas'], ['es', '🇪🇸 España'], ['us', '🇺🇸 EE. UU.']], st.news, 'data-news-f', 'Filtrar noticias')}
       <div id="mk-news-box">${newsList(m)}</div>
-      <h3 class="mk-h3" id="h-mk-ag">Agenda de la semana${a ? ` · ${dmy(a.semana[0])} – ${dmy(a.semana[1])}` : ''}</h3>${stamp(a, a ? 'Fuente: ' + credit(a.fuente, a.fuente_url) + ' · horas de Madrid' : '')}
-      ${chips([['all', 'Todos'], ['us', '🇺🇸 EE. UU.'], ['es', '🇪🇸 España'], ['eu', '🇪🇺 Zona euro']], st.ag, 'data-ag-f', 'Filtrar agenda por país')}
-      <p class="fine ag-leg">Real en <b class="pos">verde</b> si es mejor de lo previsto y en <b class="neg">rojo</b> si es peor (según la fuente). ●●● = importancia alta.</p>
-      <div id="mk-ag-box">${agendaList(m)}</div>
     </div></section>`;
+  }
+  function agendaHtml(m) {
+    const a = m.agenda;
+    return `<section class="panel mk-sec" aria-labelledby="h-mk-ag" data-test="mk-agenda"><div class="panel-pad">
+      ${secHead('h-mk-ag', ICO.cal, 'Agenda', 'Datos macro de EE. UU., España y la zona euro (IPC, empleo, tipos de interés, PIB…). <span class="ag-dot on" aria-hidden="true"></span> = día con eventos de importancia alta. Toca un día para ver sus eventos.', pillbar(['week', 'month'], st.agView, 'data-ag-view', 'Vista de la agenda'))}
+      ${stamp(a, a ? 'Fuente: ' + credit(a.fuente, a.fuente_url) + ' · horas de Madrid' : '')}
+      <p class="ag-range" id="ag-range"></p>
+      ${chips([['all', 'Todos'], ['us', '🇺🇸 EE. UU.'], ['es', '🇪🇸 España'], ['eu', '🇪🇺 Euro']], st.ag, 'data-ag-f', 'Filtrar agenda por país')}
+      <div id="mk-ag-box">${a ? agendaBox(m) : '<p class="empty">Sin agenda.</p>'}</div>
+      <p class="fine ag-leg">Real en <b class="pos">verde</b> si es mejor de lo previsto y en <b class="neg">rojo</b> si es peor (según la fuente). ●●● = importancia alta.</p>
+    </div></section>`;
+  }
+  function drawAg() {
+    const a = st.m && st.m.agenda; if (!a || !$('#mk-ag-box')) return;
+    $('#mk-ag-box').innerHTML = agendaBox(st.m);
+    $$('[data-ag-view]').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.agView === st.agView)));
+    $$('[data-ag-f]').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.agF === st.ag)));
+    const [r0, r1] = agRange(a);
+    $('#ag-range').textContent = st.agView === 'month' ? `${cap(MESES[+r0.slice(5, 7) - 1])} ${r0.slice(0, 4)}` : `Semana del ${dmy(r0)} al ${dmy(r1)}`;
   }
 
   /* ---------- Sentimiento (Fear & Greed) ---------- */
@@ -289,12 +336,12 @@
 
   /* ---------- Montaje ---------- */
   function html(m) {
-    st.m = m;
+    st.m = m; if (st.agDay == null && !st.agInit) { st.agDay = (m.generado || '').slice(0, 10) || null; st.agInit = true; }
     return `<div class="page-h"><h1>Actualidad de mercados</h1><p>Índices, noticias, agenda, sentimiento y sectores · actualizado ${when(m.generado)} (hora de Madrid)</p></div>`
-      + indicesHtml(m) + newsHtml(m) + fgHtml(m) + secHtml(m)
+      + indicesHtml(m) + newsHtml(m) + agendaHtml(m) + fgHtml(m) + secHtml(m)
       + `<p class="fine mk-disc">Datos públicos de las fuentes indicadas, descargados al cierre de la tarde junto con la cartera. Si una fuente falla, se muestra el último dato disponible con su fecha. Uso informativo; no es asesoramiento financiero.</p>`;
   }
-  function draw() { drawIndices(); drawFg(); drawSec(); }
+  function draw() { drawIndices(); drawAg(); drawFg(); drawSec(); }
   function bind(root) {
     root.addEventListener('click', (ev) => {
       const t = ev.target.closest('button'); if (!t) return;
@@ -308,7 +355,13 @@
       else if (t.dataset.secPeriod) { st.sec = t.dataset.secPeriod; drawSec(); refocus(`[data-sec-period="${st.sec}"]`); }
       else if (t.dataset.newsF) { st.news = t.dataset.newsF; st.newsAll = false; $('#mk-news-box').innerHTML = newsList(st.m); $$('[data-news-f]').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.newsF === st.news))); }
       else if (t.dataset.newsMore) { st.newsAll = !st.newsAll; $('#mk-news-box').innerHTML = newsList(st.m); refocus('[data-news-more]'); }
-      else if (t.dataset.agF) { st.ag = t.dataset.agF; $('#mk-ag-box').innerHTML = agendaList(st.m); $$('[data-ag-f]').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.agF === st.ag))); }
+      else if (t.dataset.agF) { st.ag = t.dataset.agF; drawAg(); }
+      else if (t.dataset.agView) {
+        st.agView = t.dataset.agView; const [r0, r1] = agRange(st.m.agenda), today = (st.m.generado || '').slice(0, 10);
+        if (!st.agDay || st.agDay < r0 || st.agDay > r1) st.agDay = today >= r0 && today <= r1 ? today : r0;
+        drawAg(); refocus(`[data-ag-view="${st.agView}"]`);
+      }
+      else if (t.dataset.agDay) { const d = t.dataset.agDay; st.agDay = st.agDay === d ? null : d; drawAg(); refocus(`[data-ag-day="${d}"]`); }
     });
   }
   window.CFMarket = { html, draw, bind };

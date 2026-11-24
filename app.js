@@ -383,7 +383,6 @@
   function showTab(id, focus) {
     state.tab = id;
     TABS.forEach(([t]) => { const b = $('#tabbtn-' + t), p = $('#tab-' + t); b.setAttribute('aria-selected', String(t === id)); b.tabIndex = t === id ? 0 : -1; p.hidden = t !== id; });
-    $$('.nav [data-tab]').forEach((b) => b.setAttribute('aria-current', b.dataset.tab === id ? 'page' : 'false'));
     if (id === 'cartera') drawEquity(); else mountMarket();
     if (focus) $('#tabbtn-' + id).focus();
   }
@@ -400,11 +399,12 @@
     $('#lock-btn').hidden = false;
     $('#foot-date').textContent = 'Datos a ' + F.date(d.fecha_datos);
     const app = $('#app');
-    app.innerHTML = tabsHtml() + `<div id="tab-cartera" role="tabpanel" aria-labelledby="tabbtn-cartera" ${state.tab === 'cartera' ? '' : 'hidden'}><div class="page-h"><h1>Resumen de la cartera</h1><p>Histórico y métricas de la Cartera Family · datos a ${F.date(d.fecha_datos)}</p></div>`
+    app.innerHTML = `<div id="tab-cartera" role="tabpanel" aria-labelledby="tabbtn-cartera" ${state.tab === 'cartera' ? '' : 'hidden'}><div class="page-h"><h1>Resumen de la cartera</h1><p>Histórico y métricas de la Cartera Family · datos a ${F.date(d.fecha_datos)}</p></div>`
       + equityPanel(d) + kpisHtml(d) + positionsPanel(d) + footerHtml(d) + `</div><div id="tab-actualidad" role="tabpanel" aria-labelledby="tabbtn-actualidad" ${state.tab === 'actualidad' ? '' : 'hidden'}></div>`;
     app.setAttribute('aria-busy', 'false');
     drawEquity(); drawTable();
-    $('.nav').innerHTML = TABS.map(([id, t, ico]) => `<button type="button" data-tab="${id}" aria-current="${state.tab === id ? 'page' : 'false'}">${ico}${t}</button>`).join('');
+    /* v16: una sola barra de pestañas, arriba en la cabecera (antes salía dos veces: cabecera + barra bajo ella) */
+    $('.nav').innerHTML = tabsHtml(); $('.nav').classList.add('tabs-on'); $('.topbar').classList.add('has-tabs');
     $('.nav').addEventListener('click', (ev) => { const b = ev.target.closest('[data-tab]'); if (b) showTab(b.dataset.tab, true); });
     $('.apptabs').addEventListener('keydown', (ev) => {
       const i = TABS.findIndex(([t]) => t === state.tab); let j = null;
