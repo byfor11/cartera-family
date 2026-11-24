@@ -4,7 +4,7 @@
   const $ = (s, r = document) => r.querySelector(s);
   const $$ = (s, r = document) => [...r.querySelectorAll(s)];
   const esc = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
-  const state = { data: null, view: 'graph', calUnit: 'pct', period: 'all', ovl: { bench: false }, month: null, sort: 'valor', q: '', tipo: '' };
+  const state = { tab: 'cartera', data: null, view: 'graph', calUnit: 'pct', period: 'all', ovl: { bench: false }, month: null, sort: 'valor', q: '', tipo: '' };
   const TIPO_K = { 'Renta Variable': 'rv', 'Renta Variable (indexado)': 'rv', 'Renta Fija': 'rf', 'Monetario': 'mon', 'Retorno Absoluto': 'ra', 'Plan de pensiones': 'pp', 'Liquidez': 'liq' };
   const tk = (t) => TIPO_K[t] || 'liq';
   const arrow = (x) => (x > 0 ? '▲' : x < 0 ? '▼' : '■');
@@ -367,17 +367,55 @@
     const [title, tag, body] = infoText(key); $('#info-title').textContent = title; $('#info-tag').textContent = tag; $('#info-body').innerHTML = body;
     const dlg = $('#info'); dlg.showModal ? dlg.showModal() : dlg.setAttribute('open', '');
   }
-  function render(d) {
+  /* ---------- Pestañas (v13): Mi cartera | Actualidad ---------- */
+  const TABS = [['cartera', 'Mi cartera', '<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="3" y="7" width="18" height="13" rx="2"/><path d="M8 7V5a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>'],
+    ['actualidad', 'Actualidad', '<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M3 3v18h18"/><path d="m7 15 4-4 3 3 5-6"/></svg>']];
+  const mk = { data: null, err: null, mounted: false };
+  function tabsHtml() {
+    return `<div class="apptabs" role="tablist" aria-label="Secciones de la app">${TABS.map(([id, t, ico]) => `<button type="button" role="tab" id="tabbtn-${id}" data-tab="${id}" aria-controls="tab-${id}" aria-selected="${state.tab === id}" tabindex="${state.tab === id ? 0 : -1}">${ico}${t}</button>`).join('')}</div>`;
+  }
+  function mountMarket() {
+    const box = $('#tab-actualidad'); if (!box || box.hidden) return;
+    if (!mk.data) { box.innerHTML = `<section class="card mk-wait" data-test="mk-wait"><p>${mk.err ? esc(mk.err) : 'Cargando datos de mercado…'}</p></section>`; return; }
+    if (!mk.mounted) { box.innerHTML = CFMarket.html(mk.data); CFMarket.bind(box); mk.mounted = true; }
+    CFMarket.draw();
+  }
+  function showTab(id, focus) {
+    state.tab = id;
+    TABS.forEach(([t]) => { const b = $('#tabbtn-' + t), p = $('#tab-' + t); b.setAttribute('aria-selected', String(t === id)); b.tabIndex = t === id ? 0 : -1; p.hidden = t !== id; });
+    $$('.nav [data-tab]').forEach((b) => b.setAttribute('aria-current', b.dataset.tab === id ? 'page' : 'false'));
+    if (id === 'cartera') drawEquity(); else mountMarket();
+    if (focus) $('#tabbtn-' + id).focus();
+  }
+  async function loadMarket(key) {
+    try {
+      const r = await fetch('data/market.enc.json', { cache: 'no-cache' });
+      if (!r.ok) throw new Error('sin datos de mercado (' + r.status + ')');
+      mk.data = await CFCrypto.decrypt(key, await r.json());
+    } catch (e) { mk.err = 'No se han podido cargar los datos de mercado: ' + (e.message || 'error') + '.'; }
+    mountMarket();
+  }
+  function render(d, key) {
     state.data = d;
     $('#lock-btn').hidden = false;
     $('#foot-date').textContent = 'Datos a ' + F.date(d.fecha_datos);
     const app = $('#app');
-    app.innerHTML = `<div class="page-h"><h1>Resumen de la cartera</h1><p>Histórico y métricas de la Cartera Family · datos a ${F.date(d.fecha_datos)}</p></div>`
-      + equityPanel(d) + kpisHtml(d) + positionsPanel(d) + footerHtml(d);
+    app.innerHTML = tabsHtml() + `<div id="tab-cartera" role="tabpanel" aria-labelledby="tabbtn-cartera" ${state.tab === 'cartera' ? '' : 'hidden'}><div class="page-h"><h1>Resumen de la cartera</h1><p>Histórico y métricas de la Cartera Family · datos a ${F.date(d.fecha_datos)}</p></div>`
+      + equityPanel(d) + kpisHtml(d) + positionsPanel(d) + footerHtml(d) + `</div><div id="tab-actualidad" role="tabpanel" aria-labelledby="tabbtn-actualidad" ${state.tab === 'actualidad' ? '' : 'hidden'}></div>`;
     app.setAttribute('aria-busy', 'false');
     drawEquity(); drawTable();
+    $('.nav').innerHTML = TABS.map(([id, t, ico]) => `<button type="button" data-tab="${id}" aria-current="${state.tab === id ? 'page' : 'false'}">${ico}${t}</button>`).join('');
+    $('.nav').addEventListener('click', (ev) => { const b = ev.target.closest('[data-tab]'); if (b) showTab(b.dataset.tab, true); });
+    $('.apptabs').addEventListener('keydown', (ev) => {
+      const i = TABS.findIndex(([t]) => t === state.tab); let j = null;
+      if (ev.key === 'ArrowRight') j = (i + 1) % TABS.length; else if (ev.key === 'ArrowLeft') j = (i + TABS.length - 1) % TABS.length; else if (ev.key === 'Home') j = 0; else if (ev.key === 'End') j = TABS.length - 1;
+      if (j != null) { ev.preventDefault(); showTab(TABS[j][0], true); }
+    });
+    if (key) loadMarket(key); else { mk.err = 'Datos de mercado no disponibles.'; }
     app.addEventListener('click', (ev) => {
       const t = ev.target.closest('button'); if (!t) return;
+      if (t.dataset.tab) { showTab(t.dataset.tab, true); window.scrollTo(0, 0); return; }
+      if (t.closest('#tab-actualidad')) return; // la pestaña Actualidad gestiona sus propios botones (market.js)
       if (t.dataset.view) { state.view = t.dataset.view; drawEquity(); }
       else if (t.dataset.calUnit) { state.calUnit = t.dataset.calUnit; drawEquity(); const b = $(`[data-cal-unit="${state.calUnit}"]`); b && b.focus(); }
       else if (t.dataset.period) { state.period = t.dataset.period; if (state.view !== 'graph') state.view = 'graph'; drawEquity(); const pb = $(`[data-period="${state.period}"]`); pb && pb.focus(); }
@@ -390,7 +428,7 @@
     });
     $('#q').addEventListener('input', (ev) => { state.q = ev.target.value; drawTable(); });
     $('#tipo').addEventListener('change', (ev) => { state.tipo = ev.target.value; drawTable(); });
-    let rz, lastW = window.innerWidth; window.addEventListener('resize', () => { if (window.innerWidth === lastW) return; lastW = window.innerWidth; clearTimeout(rz); rz = setTimeout(() => { drawEquity(); }, 150); });
+    let rz, lastW = window.innerWidth; window.addEventListener('resize', () => { if (window.innerWidth === lastW) return; lastW = window.innerWidth; clearTimeout(rz); rz = setTimeout(() => { if (state.tab === 'actualidad') mountMarket(); else drawEquity(); }, 150); });
   }
   ['info', 'sheet'].forEach((id) => $('#' + id).addEventListener('click', (ev) => { if (ev.target.id === id) ev.target.close(); }));
 
@@ -428,7 +466,7 @@
         try { data = await CFCrypto.decrypt(key, env); } catch (e) { throw new Error('bad'); }
         if ($('#remember').checked) { try { await CFCrypto.remember(key, env); } catch (e) { /* sin almacenamiento */ } }
         pw.value = '';
-        render(data);
+        render(data, key);
       } catch (e) {
         btn.disabled = false; btn.textContent = 'Desbloquear';
         err.textContent = e.message === 'bad' ? 'Contraseña incorrecta. Vuelve a intentarlo.' : 'No se ha podido descifrar en este navegador.';
@@ -444,7 +482,9 @@
     const env = await r.json();
     const key = await CFCrypto.stored(env);
     if (key) {
-      try { render(await CFCrypto.decrypt(key, env)); return; } catch (e) { CFCrypto.forget(); }
+      let data = null;
+      try { data = await CFCrypto.decrypt(key, env); } catch (e) { CFCrypto.forget(); }
+      if (data) { render(data, key); return; }
     } else if (CFCrypto.hasStored()) {
       CFCrypto.forget(); unlockScreen(env, 'Los datos se han cifrado de nuevo con otra contraseña. Introdúcela otra vez.'); return;
     }

@@ -28,12 +28,13 @@
     host.innerHTML = '';
     const { dates, series } = opts;
     const has2 = series.some((s) => s.axis === 'y2');
-    const W = Math.max(280, host.clientWidth || 340), H = Math.round(Math.min(360, Math.max(240, W * 0.66)));
-    const P = { l: 44, r: has2 ? 40 : 10, t: 14, b: 24 };
+    const W = Math.max(260, host.clientWidth || 340), H = opts.h || Math.round(Math.min(360, Math.max(240, W * 0.66)));
+    const P = { l: opts.padL || 44, r: has2 ? 40 : 10, t: 14, b: 24 };
     const N = dates.length;
     let [min, max] = range(series, 'y');
     if (opts.baseline) { min = Math.min(min, opts.areaBase || 0); max = Math.max(max, opts.areaBase || 0); }
-    const pad = (max - min) * 0.06 || Math.abs(max) * 0.01 || 0.01; min -= pad; max += pad;
+    if (opts.yRange) { min = opts.yRange[0]; max = opts.yRange[1]; }
+    const pad = opts.yRange ? 0 : (max - min) * 0.06 || Math.abs(max) * 0.01 || 0.01; min -= pad; max += pad;
     const ticks = niceTicks(min, max, opts.nTicks || 5); min = Math.min(min, ticks[0]); max = Math.max(max, ticks[ticks.length - 1]);
     const x = (i) => P.l + (N <= 1 ? 0 : (i / (N - 1)) * (W - P.l - P.r));
     const y = (v) => P.t + (1 - (v - min) / (max - min)) * (H - P.t - P.b);
@@ -52,6 +53,7 @@
     const grad = el('linearGradient', { id: gid, x1: 0, y1: 0, x2: 0, y2: 1 }, defs);
     el('stop', { offset: '0%', class: 'a1' }, grad); el('stop', { offset: '100%', class: 'a2' }, grad);
 
+    (opts.bands || []).forEach((b) => el('rect', { x: P.l, width: W - P.l - P.r, y: y(b[1]), height: Math.max(0, y(b[0]) - y(b[1])), class: 'band ' + (b[2] || ''), 'aria-hidden': 'true' }, svg));
     const gGrid = el('g', { class: 'grid', 'aria-hidden': 'true' }, svg);
     ticks.forEach((t) => {
       if (t < min - 1e-9 || t > max + 1e-9) return;
@@ -66,7 +68,7 @@
     for (let k = 0; k < nLab; k++) {
       const i = Math.round((k / (nLab - 1)) * (N - 1));
       const tx = el('text', { x: x(i), y: H - 6, 'text-anchor': k === 0 ? 'start' : k === nLab - 1 ? 'end' : 'middle', class: 'xl' }, gGrid);
-      tx.textContent = F.dateShort(dates[i]);
+      tx.textContent = opts.xFmt ? opts.xFmt(dates[i]) : F.dateShort(dates[i]);
     }
     if (opts.zeroLine && !opts.baseline && min < 0 && max > 0) el('line', { x1: P.l, x2: W - P.r, y1: y(0), y2: y(0), class: 'zero', 'aria-hidden': 'true' }, svg);
     // Series secundarias primero (debajo), la principal encima
