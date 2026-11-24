@@ -19,6 +19,7 @@
     ymd: (iso) => { const m = String(iso || '').match(/(\d{4})-(\d{2})-(\d{2})(?:[T ](\d{2}):(\d{2}))?/); return m ? { y: m[1], mo: m[2], d: m[3], h: m[4], mi: m[5] } : null; },
     date: (iso) => { const t = F.ymd(iso); return t ? `${t.d}/${t.mo}/${t.y}` : '—'; },
     dateDM: (iso) => { const t = F.ymd(iso); return t ? `${t.d}/${t.mo}` : '—'; },
+    dateDMY: (iso) => { const t = F.ymd(iso); return t ? `${t.d}/${t.mo}/${t.y.slice(2)}` : '—'; },
     when: (iso) => { const t = F.ymd(iso); if (!t) return '—'; return t.h ? `${t.d}/${t.mo}/${t.y}, ${t.h}:${t.mi}` : `${t.d}/${t.mo}/${t.y}`; },
     dateLong: (iso) => {
       if (!iso) return '—';

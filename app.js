@@ -155,7 +155,7 @@
     };
     const tipText = (i) => `${F.date(dates[i])}. Valor ${F.eur(s[i].v)}.${cus[i] > 0.004 ? ` Custodia Fidelity acumulada ${F.eur(cus[i])}.` : ''} ${baseName} ${F.eur(baseEur[i])}. ${gain[i] >= 0 ? 'Ganancia' : 'Pérdida'} ${F.eurSigned(gain[i])}, ${F.pctSigned(gpct[i])}. Rentabilidad TWR ${F.pctSigned(twr[i])}.` + (iniAt[i] ? ` Aportación a ${iniAt[i].plataforma} el ${F.date(iniAt[i].f_aportacion)}: ${F.eur(iniAt[i].importe)}.` : '') + (state.ovl.bench ? ` Benchmark ${F.pctSigned(bench[i])}.` : '');
     const opts = {
-      xFmt: (f) => F.dateDM(f),
+      xFmt: (f) => (f === dates[L] ? F.dateDM(f) : F.dateShort(f)),
       yFmt: (y, step) => (Math.abs(y) < 1e-12 ? '0%' : F.num(y * 100, decFor(step * 100)) + '%'),
       tipHtml, tipText, points, areaBase: 0, baseline: {},
       ariaLabel: `Ganancia o pérdida sobre ${isAll ? 'el capital aportado' : 'la base del periodo'} del ${F.date(dates[0])} al ${F.date(dates[L])}: la línea de la cartera va por encima de la línea de capital aportado cuando hay ganancia y por debajo cuando hay pérdida. Termina en ${F.pctSigned(gpct[L])} (${F.eurSigned(gain[L])}) sobre ${F.eur(baseEur[L], 0)}. Mínimo ${F.pctSigned(Math.min(...gpct))}, máximo ${F.pctSigned(Math.max(...gpct))}.`
@@ -167,7 +167,7 @@
         <span><i class="lsw inv" aria-hidden="true"></i>${isAll ? '<span class="lg">Capital aportado</span><span class="sh">Aportado</span>' : 'Base del periodo'}</span>
         <span class="lg-gl"><i class="gl pos" aria-hidden="true"></i>gana <i class="gl neg" aria-hidden="true"></i>pierde</span>
         ${ini.length ? '<span><i class="ptsw" aria-hidden="true"></i><span class="lg">Aportaciones</span><span class="sh">Aportación</span></span>' : ''}
-      </div><button type="button" class="ovl" data-ovl="bench" aria-pressed="${state.ovl.bench}"><i class="sw" aria-hidden="true"></i>Benchmark</button></div><div id="chart"></div>
+      </div><button type="button" class="ovl" data-ovl="bench" aria-pressed="${state.ovl.bench}"><i class="sw" aria-hidden="true"></i>Benchmark</button></div><div class="chart-frame"><div id="chart"></div><span class="chart-datos" data-test="chart-datos">Datos a ${F.dateDM(dates[L])}</span></div>
       <p class="fine">${isAll ? 'La línea discontinua es el dinero aportado' : 'La línea discontinua es el valor neto al inicio del periodo más lo aportado después'}: la cartera va <b class="pos">por encima</b> cuando ganas y <b class="neg">por debajo</b> cuando pierdes (% = resultado neto, ya restada la custodia de Fidelity, ÷ ${isAll ? 'lo aportado' : 'esa base'}; es la misma cifra que la rentabilidad neta). Toca o arrastra el gráfico para ver cada día los € y la rentabilidad TWR.${state.ovl.bench ? ` Benchmark: el mismo dinero, con las mismas aportaciones, en un índice de igual composición (${esc(d.benchmark.pesos_hoy_txt)} hoy).` : ''}</p>`;
     lineChart($('#chart'), { dates, series, ...opts });
     const cap = document.createElement('p'); cap.className = 'fine chart-asof'; cap.setAttribute('data-test', 'chart-asof');
@@ -193,9 +193,11 @@
     const [y, mo] = sel.m.split('-').map(Number);
     const cells = []; const firstDow = (new Date(Date.UTC(y, mo - 1, 1)).getUTCDay() + 6) % 7; // 0 = lunes
     const nDays = new Date(Date.UTC(y, mo, 0)).getUTCDate(); const byDate = Object.fromEntries(sel.days.map((x) => [x.f, x]));
+    const lastIso = state.data.fecha_datos;
+    const maxDay = (sel.m === lastIso.slice(0, 7)) ? +lastIso.slice(8, 10) : nDays;
     let pad = firstDow < 5 ? firstDow : 0;
     for (let i = 0; i < pad; i++) cells.push('<div class="d empty" aria-hidden="true"></div>');
-    for (let day = 1; day <= nDays; day++) {
+    for (let day = 1; day <= maxDay; day++) {
       const dow = (firstDow + day - 1) % 7; if (dow > 4) continue;
       const iso = `${y}-${String(mo).padStart(2, '0')}-${String(day).padStart(2, '0')}`; const it = byDate[iso];
       if (!it) { cells.push(`<div class="d empty"><span class="n" aria-hidden="true">${day}</span><span class="sr-only">${day}: sin dato</span></div>`); continue; }
@@ -205,7 +207,7 @@
     area.innerHTML = `<div class="cal-top"><p class="label" style="margin:0">${state.calUnit === 'pct' ? 'Rentabilidad mensual (TWR)' : 'Ganancia mensual en € (sin aportaciones)'} · elige un mes</p>
       <div class="toggle sm" role="group" aria-label="Unidad del calendario"><button type="button" data-cal-unit="pct" aria-pressed="${state.calUnit === 'pct'}">%</button><button type="button" data-cal-unit="eur" aria-pressed="${state.calUnit === 'eur'}">€</button></div></div>
       <div class="cal-months" role="group" aria-label="Meses">${months.map((m) => { const [yy, mm] = m.m.split('-').map(Number); return `<button type="button" class="${tint(m.r, 0.01, 0.025)}" data-month="${m.m}" aria-pressed="${m.m === state.month}" aria-label="${MESES[mm - 1]} ${yy}: ${F.pctSigned(m.r)}, ${F.eurSigned(m.e)}"><span class="m">${MESES[mm - 1].slice(0, 3)} ${String(yy).slice(2)}</span><span class="v">${state.calUnit === 'pct' ? F.pctSigned(m.r, 2).replace('\u00a0%', '%') : (m.e > 0 ? '+' : '') + F.num(m.e, 0) + '€'}</span></button>`; }).join('')}</div>
-      <p class="label" style="margin-top:8px">${MESES[mo - 1]} ${y} · día a día${state.calUnit === 'pct' ? ' (%)' : ' (€)'}</p>
+      <p class="label" style="margin-top:8px">${MESES[mo - 1]} ${y} · día a día${state.calUnit === 'pct' ? ' (%)' : ' (€)'} · <span class="chart-datos" data-test="chart-datos">Datos a ${F.dateDM(state.data.fecha_datos)}</span></p>
       <div class="cal-head" aria-hidden="true"><span>LUN</span><span>MAR</span><span>MIÉ</span><span>JUE</span><span>VIE</span></div>
       <div class="cal-grid" role="list" aria-label="Rentabilidad diaria de ${MESES[mo - 1]} ${y}">${cells.join('')}</div>
       <div class="cal-legend" aria-hidden="true">Diario: <i class="tn3"></i>&lt; −0,75% <i class="tn2"></i> <i class="tn1"></i>0 <i class="tp1"></i> <i class="tp2"></i><i class="tp3"></i>&gt; +0,75% (color según % del día) · Mensual: tramos de 1% y 2,5%</div>`;
