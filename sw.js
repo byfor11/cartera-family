@@ -1,6 +1,6 @@
 /* Cartera Family service worker: red primero (con límite de tiempo) y caché de respaldo para usarla sin conexión. */
-const CACHE = 'cartera-family-v17-d20261120-4c4dc3-m82c963';
-const ASSETS = ['./', 'index.html', 'style.css', 'format.js', 'chart.js', 'crypto.js', 'app.js', 'market.js', 'manifest.webmanifest', 'fonts/inter-latin.woff2', 'fonts/jetbrains-mono-latin.woff2', 'data/portfolio.enc.json', 'data/market.enc.json',
+const CACHE = 'cartera-family-v18-d20261120-4c4dc3-ma89209';
+const ASSETS = ['./', 'index.html', 'style.css', 'format.js', 'chart.js', 'crypto.js', 'app.js', 'market.js', 'gestion.js', 'manifest.webmanifest', 'fonts/inter-latin.woff2', 'fonts/jetbrains-mono-latin.woff2', 'data/portfolio.enc.json', 'data/market.enc.json', 'data/models.enc.json',
   'icons/apple-touch-icon.png', 'icons/icon-192.png', 'icons/icon-512.png', 'icons/icon-maskable-512.png'];
 self.addEventListener('install', (e) => {
   e.waitUntil(caches.open(CACHE).then((c) => c.addAll(ASSETS)).then(() => self.skipWaiting()));

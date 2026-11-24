@@ -369,7 +369,8 @@
   }
   /* ---------- Pestañas (v13): Mi cartera | Actualidad ---------- */
   const TABS = [['cartera', 'Mi cartera', '<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="3" y="7" width="18" height="13" rx="2"/><path d="M8 7V5a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>'],
-    ['actualidad', 'Actualidad', '<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M3 3v18h18"/><path d="m7 15 4-4 3 3 5-6"/></svg>']];
+    ['actualidad', 'Actualidad', '<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M3 3v18h18"/><path d="m7 15 4-4 3 3 5-6"/></svg>'],
+    ['gestion', 'Gestión personal', '<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v10M15 9.5c0-1.4-1.3-2.2-3-2.2s-3 .8-3 2.2 1.3 2 3 2.3 3 .9 3 2.3-1.3 2.2-3 2.2-3-.8-3-2.2"/></svg>']];
   const mk = { data: null, err: null, mounted: false };
   function tabsHtml() {
     return `<div class="apptabs" role="tablist" aria-label="Secciones de la app">${TABS.map(([id, t, ico]) => `<button type="button" role="tab" id="tabbtn-${id}" data-tab="${id}" aria-controls="tab-${id}" aria-selected="${state.tab === id}" tabindex="${state.tab === id ? 0 : -1}">${ico}${t}</button>`).join('')}</div>`;
@@ -380,10 +381,25 @@
     if (!mk.mounted) { box.innerHTML = CFMarket.html(mk.data); CFMarket.bind(box); mk.mounted = true; }
     CFMarket.draw();
   }
+  /* v18: pestaña «Gestión personal» (gestion.js); las carteras modelo llegan cifradas en data/models.enc.json */
+  const gp = { data: null, err: null, mounted: false };
+  function mountGestion() {
+    const box = $('#tab-gestion'); if (!box || box.hidden) return;
+    if (!gp.mounted) { box.innerHTML = CFGestion.html(gp.data); CFGestion.bind(box); gp.mounted = true; if (!gp.data) CFGestion.setModels(null, gp.err); }
+    CFGestion.draw();
+  }
+  async function loadModels(key) {
+    try {
+      const r = await fetch('data/models.enc.json', { cache: 'no-cache' });
+      if (!r.ok) throw new Error('sin datos (' + r.status + ')');
+      gp.data = await CFCrypto.decrypt(key, await r.json());
+    } catch (e) { gp.err = 'No se han podido cargar las carteras modelo: ' + (e.message || 'error') + '.'; }
+    if (gp.mounted) CFGestion.setModels(gp.data, gp.err);
+  }
   function showTab(id, focus) {
     state.tab = id;
     TABS.forEach(([t]) => { const b = $('#tabbtn-' + t), p = $('#tab-' + t); b.setAttribute('aria-selected', String(t === id)); b.tabIndex = t === id ? 0 : -1; p.hidden = t !== id; });
-    if (id === 'cartera') drawEquity(); else mountMarket();
+    if (id === 'cartera') drawEquity(); else if (id === 'gestion') mountGestion(); else mountMarket();
     if (focus) $('#tabbtn-' + id).focus();
   }
   async function loadMarket(key) {
@@ -400,7 +416,7 @@
     $('#foot-date').textContent = 'Datos a ' + F.date(d.fecha_datos);
     const app = $('#app');
     app.innerHTML = `<div id="tab-cartera" role="tabpanel" aria-labelledby="tabbtn-cartera" ${state.tab === 'cartera' ? '' : 'hidden'}><div class="page-h"><h1>Resumen de la cartera</h1><p>Histórico y métricas de la Cartera Family · datos a ${F.date(d.fecha_datos)}</p></div>`
-      + equityPanel(d) + kpisHtml(d) + positionsPanel(d) + footerHtml(d) + `</div><div id="tab-actualidad" role="tabpanel" aria-labelledby="tabbtn-actualidad" ${state.tab === 'actualidad' ? '' : 'hidden'}></div>`;
+      + equityPanel(d) + kpisHtml(d) + positionsPanel(d) + footerHtml(d) + `</div><div id="tab-actualidad" role="tabpanel" aria-labelledby="tabbtn-actualidad" ${state.tab === 'actualidad' ? '' : 'hidden'}></div><div id="tab-gestion" role="tabpanel" aria-labelledby="tabbtn-gestion" ${state.tab === 'gestion' ? '' : 'hidden'}></div>`;
     app.setAttribute('aria-busy', 'false');
     drawEquity(); drawTable();
     /* v16: una sola barra de pestañas, arriba en la cabecera (antes salía dos veces: cabecera + barra bajo ella) */
@@ -411,11 +427,11 @@
       if (ev.key === 'ArrowRight') j = (i + 1) % TABS.length; else if (ev.key === 'ArrowLeft') j = (i + TABS.length - 1) % TABS.length; else if (ev.key === 'Home') j = 0; else if (ev.key === 'End') j = TABS.length - 1;
       if (j != null) { ev.preventDefault(); showTab(TABS[j][0], true); }
     });
-    if (key) loadMarket(key); else { mk.err = 'Datos de mercado no disponibles.'; }
+    if (key) { loadMarket(key); loadModels(key); } else { mk.err = 'Datos de mercado no disponibles.'; gp.err = 'Carteras modelo no disponibles.'; }
     app.addEventListener('click', (ev) => {
       const t = ev.target.closest('button'); if (!t) return;
       if (t.dataset.tab) { showTab(t.dataset.tab, true); window.scrollTo(0, 0); return; }
-      if (t.closest('#tab-actualidad')) return; // la pestaña Actualidad gestiona sus propios botones (market.js)
+      if (t.closest('#tab-actualidad') || t.closest('#tab-gestion')) return; // Actualidad (market.js) y Gestión personal (gestion.js) gestionan sus propios botones
       if (t.dataset.view) { state.view = t.dataset.view; drawEquity(); }
       else if (t.dataset.calUnit) { state.calUnit = t.dataset.calUnit; drawEquity(); const b = $(`[data-cal-unit="${state.calUnit}"]`); b && b.focus(); }
       else if (t.dataset.period) { state.period = t.dataset.period; if (state.view !== 'graph') state.view = 'graph'; drawEquity(); const pb = $(`[data-period="${state.period}"]`); pb && pb.focus(); }
@@ -428,7 +444,7 @@
     });
     $('#q').addEventListener('input', (ev) => { state.q = ev.target.value; drawTable(); });
     $('#tipo').addEventListener('change', (ev) => { state.tipo = ev.target.value; drawTable(); });
-    let rz, lastW = window.innerWidth; window.addEventListener('resize', () => { if (window.innerWidth === lastW) return; lastW = window.innerWidth; clearTimeout(rz); rz = setTimeout(() => { if (state.tab === 'actualidad') mountMarket(); else drawEquity(); }, 150); });
+    let rz, lastW = window.innerWidth; window.addEventListener('resize', () => { if (window.innerWidth === lastW) return; lastW = window.innerWidth; clearTimeout(rz); rz = setTimeout(() => { if (state.tab === 'actualidad') mountMarket(); else if (state.tab === 'gestion') mountGestion(); else drawEquity(); }, 150); });
   }
   ['info', 'sheet'].forEach((id) => $('#' + id).addEventListener('click', (ev) => { if (ev.target.id === id) ev.target.close(); }));
 
