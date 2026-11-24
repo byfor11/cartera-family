@@ -595,3 +595,28 @@ main > * { min-width: 0; }
 .mc-t li b { font: 700 12px var(--mono); white-space: nowrap; }
 .mc-method a { color: var(--blue-t2); }
 .metric .v.pos { color: var(--green-t); } .metric .v.neg { color: var(--red-t); }
+
+/* ---------- v19: composición por secciones verticales con color por tipo ---------- */
+.k-m0 { --c: #fbbf24; --cb: rgba(245,158,11,.12); --cl: rgba(245,158,11,.38); }
+.k-m1 { --c: #34d399; --cb: rgba(16,185,129,.12); --cl: rgba(16,185,129,.38); }
+.k-m2 { --c: #2dd4bf; --cb: rgba(20,184,166,.12); --cl: rgba(20,184,166,.38); }
+.k-m3 { --c: #22d3ee; --cb: rgba(6,182,212,.12); --cl: rgba(6,182,212,.38); }
+.k-m4 { --c: #60a5fa; --cb: rgba(59,130,246,.14); --cl: rgba(59,130,246,.45); }
+.k-m5 { --c: #fb923c; --cb: rgba(249,115,22,.12); --cl: rgba(249,115,22,.38); }
+.k-m6 { --c: #a5b4fc; --cb: rgba(99,102,241,.13); --cl: rgba(99,102,241,.4); }
+.pill[class*="k-m"] { background: var(--cb); color: var(--c); border-color: var(--cl); }
+.mc-secs { display: flex; flex-direction: column; gap: 8px; margin-top: 8px; }
+.mc-sec { border: 1px solid var(--cl); border-left: 4px solid var(--c); border-radius: 12px; background: var(--card); overflow: hidden; }
+.mc-sh { width: 100%; display: grid; grid-template-columns: minmax(0, 1fr) auto auto 18px; align-items: center; gap: 10px; padding: 12px 12px 12px 12px; min-height: 58px; background: linear-gradient(90deg, var(--cb), transparent 70%); border: 0; color: var(--text); cursor: pointer; text-align: left; font-family: var(--sans); }
+.mc-sh:focus-visible { outline: 2px solid var(--blue-t2); outline-offset: -2px; }
+.mc-sn { min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.mc-sn b { font-size: 13.5px; font-weight: 700; color: var(--c); overflow-wrap: anywhere; }
+.mc-sn small, .mc-sw small, .mc-sr small { font: 10px var(--mono); color: var(--dim); }
+.mc-sw, .mc-sr { display: flex; flex-direction: column; align-items: flex-end; font: 700 13.5px var(--mono); white-space: nowrap; }
+.mc-sr.pos { color: var(--green-t); } .mc-sr.neg { color: var(--red-t); }
+.mc-chev { color: var(--dim); transition: transform .15s; text-align: center; } .mc-sh[aria-expanded="true"] .mc-chev { transform: rotate(180deg); color: var(--c); }
+.mc-sb { border-top: 1px solid var(--cl); }
+.mc-totw { margin-top: 10px; border: 1px solid var(--line); border-radius: 12px; }
+.ftable.mc-totals { min-width: 0; }
+.ftable.mc-totals th.first { text-align: left; }
+.ftable.mc-totals .first { max-width: none; }

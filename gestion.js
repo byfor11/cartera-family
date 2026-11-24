@@ -106,7 +106,7 @@
   }
 
   /* ================= Carteras modelo ================= */
-  const ms = { d: null, sel: 2, view: 'graph', period: 'all', year: null, month: null };
+  const ms = { d: null, sel: 2, view: 'graph', period: 'all', year: null, month: null, open: new Set(), sort: 'valor' };
   const PER = [['1d', '1 día'], ['1m', '1 mes'], ['3m', '3 meses'], ['ytd', 'YTD'], ['1y', '1 año'], ['all', 'Inicio']];
   const SHORT = ['C+', 'C', 'M', 'E', 'A', 'A+'];
   const addDays = (iso, n) => { const d = new Date(iso + 'T12:00:00Z'); d.setUTCDate(d.getUTCDate() + n); return d.toISOString().slice(0, 10); };
@@ -131,7 +131,12 @@
   }
   function tint(v, t1, t2) { if (v == null || Math.abs(v) < 1e-9) return 't0'; const a = Math.abs(v); const lvl = a <= t1 ? 1 : a <= t2 ? 2 : 3; return (v < 0 ? 'tn' : 'tp') + lvl; }
   function rvShare(d, k) { const t = d.tipos.filter((c) => /variable|alternativos rv/i.test(c.tipo)); return t.reduce((a, c) => a + c.pesos[k], 0); }
-  const TCOL = ['#93c5fd', '#60a5fa', '#38bdf8', '#a5b4fc', '#3b82f6', '#2563eb', '#1e40af', '#0ea5e9'];
+  /* v19: un color por tipo de fondo (azul = renta variable, el color principal de la app; verdes = renta fija como en Mi cartera;
+     ámbar = corto plazo como «Monetario»; alternativos en naranja/índigo). La misma clase k-mN pinta la sección, la barra y la píldora. */
+  const TYPE_COL = { 'RF Corto Plazo': 0, 'Renta Fija Global': 1, 'Renta Fija Alto Rendimiento': 2, 'Renta Fija Emergente': 3, 'Renta Variable': 4, 'Alternativos Renta Fija': 5, 'Alternativos Renta Variable': 6 };
+  const TCOL = ['#fbbf24', '#34d399', '#2dd4bf', '#22d3ee', '#3b82f6', '#fb923c', '#818cf8'];
+  const tIdx = (t, j) => (TYPE_COL[t] != null ? TYPE_COL[t] : j % TCOL.length);
+  const CLASE_TXT = { limpia: 'clase limpia', 'única': 'clase única', 'indicada por Andbank': 'clase indicada por Andbank', 'con retrocesión': 'clase con retrocesión' };
 
   function modelsHtml(d) {
     if (!d) return `<section class="panel mk-sec" aria-labelledby="h-gp-mod" data-test="gp-models"><div class="panel-pad">${secHead('h-gp-mod', ICO.pie, 'Carteras modelo')}<p class="empty" data-test="gp-models-wait">${ms.err ? esc(ms.err) : 'Cargando carteras modelo…'}</p></div></section>`;
@@ -139,7 +144,7 @@
       const tot = p.stats ? p.stats.total : null;
       return `<button type="button" class="mc" data-mc="${k}" aria-pressed="${k === ms.sel}" data-test="mc-card">
         <span class="mc-n">${esc(p.nombre)}</span>
-        <span class="mc-bar" aria-hidden="true">${d.tipos.map((c, j) => (c.pesos[k] ? `<i style="width:${c.pesos[k]}%;background:${TCOL[j % TCOL.length]}"></i>` : '')).join('')}</span>
+        <span class="mc-bar" aria-hidden="true">${d.tipos.map((c, j) => (c.pesos[k] ? `<i style="width:${c.pesos[k]}%;background:${TCOL[tIdx(c.tipo, j)]}"></i>` : '')).join('')}</span>
         <span class="mc-s">${p.n_fondos} fondos · RV ${F.num(rvShare(d, k), 0)} %</span>
         <span class="mc-r ${cl(tot)}">${tot == null ? 'sin track record' : pctS(tot)}</span>
         <span class="mc-s">${p.inicio ? 'desde ' + F.date(p.inicio) : '—'}</span></button>`;
@@ -148,13 +153,53 @@
       ${secHead('h-gp-mod', ICO.pie, 'Carteras modelo', `${esc(d.fuente)} · composición publicada con datos a ${F.date(d.fecha_datos)} · 6 perfiles de riesgo`)}
       ${d.cambio && d.cambio.detectado ? `<p class="mc-warn" data-test="mc-change">Andbank cambió la composición (detectado el ${F.date(d.cambio.detectado.slice(0, 10))}): se muestra la nueva.</p>` : ''}
       <div class="mc-list" role="group" aria-label="Elige una cartera modelo">${cards}</div>
-      <div class="mc-legend" aria-hidden="true">${d.tipos.map((c, j) => `<span><i style="background:${TCOL[j % TCOL.length]}"></i>${esc(c.tipo)}</span>`).join('')}</div>
+      <div class="mc-legend" aria-hidden="true">${d.tipos.map((c, j) => `<span><i style="background:${TCOL[tIdx(c.tipo, j)]}"></i>${esc(c.tipo)}</span>`).join('')}</div>
     </div></section><div id="mc-detail"></div>`;
   }
+  /* v19: composición en secciones verticales por tipo de fondo (color, peso y rentabilidad del tipo); al tocar una sección se
+     despliega la tabla de sus fondos, que es la MISMA tabla de Mi cartera (window.CFTable de app.js) con una cartera nocional. */
+  function fundRows(d, p, c, j) {
+    const pos = (p.posicion || {}).fondos || {};
+    return c.fondos.filter((f) => f.pesos[ms.sel] > 0).map((f) => {
+      const x = pos[f.isin] || {};
+      return { id: f.isin || f.nombre, nombre: f.nombre, isin: f.isin, plataforma: CLASE_TXT[f.clase] || 'clase no verificada', tipo: c.tipo, tipoCls: 'k-m' + tIdx(c.tipo, j),
+        participaciones: x.participaciones ?? null, vl: x.vl ?? null, fecha_vl: x.fecha_vl, valor: x.valor ?? null, diario: x.diario ?? null, plp: x.plp ?? null, pl: x.pl ?? null,
+        peso: x.peso ?? null, spark: x.spark, objetivo: f.pesos[ms.sel], invertido: x.invertido, f };
+    });
+  }
   function compHtml(d, k) {
-    return `<div class="mc-comp" data-test="mc-comp">${d.tipos.filter((c) => c.pesos[k] > 0).map((c) => `<div class="mc-t" data-test="mc-tipo">
-        <div class="mc-th"><span>${esc(c.tipo)}</span><b>${F.num(c.pesos[k], 2)} %</b></div>
-        <ul>${c.fondos.filter((f) => f.pesos[k] > 0).map((f) => `<li data-test="mc-fondo"><span class="mc-fn">${esc(f.nombre)}<small>${f.isin ? `ISIN ${esc(f.isin)}` : 'ISIN no disponible'}${f.vl ? ` · VL ${F.num(f.vl.valor, 2)} € (${F.date(f.vl.ultimo)})` : ' · sin precios'}</small></span><b>${F.num(f.pesos[k], 2)} %</b></li>`).join('')}</ul></div>`).join('')}</div>`;
+    const p = d.perfiles[k], T = Object.fromEntries((p.tipos || []).map((t) => [t.tipo, t]));
+    const secs = d.tipos.map((c, j) => [c, j]).filter(([c]) => c.pesos[k] > 0).map(([c, j]) => {
+      const t = T[c.tipo], open = ms.open.has(c.tipo), n = c.fondos.filter((f) => f.pesos[k] > 0).length, id = 'mcs-' + tIdx(c.tipo, j);
+      return `<div class="mc-sec k-m${tIdx(c.tipo, j)}" data-test="mc-tipo" data-tipo="${esc(c.tipo)}">
+        <button type="button" class="mc-sh" data-mc-sec="${esc(c.tipo)}" aria-expanded="${open}" aria-controls="${id}">
+          <span class="mc-sn"><b>${esc(c.tipo)}</b><small>${n} fondo${n > 1 ? 's' : ''}</small></span>
+          <span class="mc-sw" data-test="mc-tipo-peso">${F.num(c.pesos[k], 2)}\u00a0%<small>peso</small></span>
+          <span class="mc-sr ${cl(t && t.rent)}" data-test="mc-tipo-rent">${t ? pctS(t.rent) : '—'}<small>${t ? 'desde inicio' : 'sin datos'}</small></span>
+          <span class="mc-chev" aria-hidden="true">▾</span></button>
+        <div class="mc-sb" id="${id}" ${open ? '' : 'hidden'}>${open ? secTable(d, p, c, j) : ''}</div></div>`;
+    }).join('');
+    return `<div class="mc-secs" data-test="mc-comp">${secs}</div>`;
+  }
+  function secTable(d, p, c, j) {
+    const rows = window.CFTable.sort(fundRows(d, p, c, j), ms.sort), t = (p.tipos || []).find((x) => x.tipo === c.tipo), sg = window.CFTable.signed;
+    const tot = rows.reduce((a, r) => a + (r.valor || 0), 0), pl = rows.reduce((a, r) => a + Math.round((r.pl || 0) * 100), 0) / 100, w = rows.reduce((a, r) => a + (r.peso || 0), 0);
+    const noc = (d.comision || {}).nocional_eur || 10000;
+    return `<div class="table-scroll" role="region" aria-label="Fondos de ${esc(c.tipo)}, desliza en horizontal" tabindex="0" data-test="mc-ftable">${window.CFTable.html({
+      list: rows, sort: ms.sort, fecha: p.fin, btn: 'data-mc-fund', caption: `Fondos de ${c.tipo} en la cartera ${p.nombre} a ${F.date(p.fin)}`,
+      labels: { qty: 'Participaciones', qtySub: `cartera nocional de ${F.eur(noc, 0)}`, since: 'Desde inicio', sinceEur: '€ desde inicio' },
+      foot: () => (p.posicion ? `<tr class="tf-sub"><th scope="row" class="first">Total ${esc(c.tipo)} <small>valor − aportado</small></th><td></td><td></td><td></td><td>${F.eur(tot)}</td><td>${t ? sg(t.diario, (x) => F.pctSigned(x)) : ''}</td><td data-test="sum-plp">${t ? sg(t.rent, (x) => F.pctSigned(x)) : ''}</td><td class="eurc" data-test="sum-pl-eur">${sg(pl, (x) => F.eurSigned(x))}</td><td>${F.pct(w)}</td><td></td></tr>` : ''),
+    })}</div>`;
+  }
+  function totHtml(d, p) {
+    const P = p.posicion; if (!P) return '';
+    const sg = window.CFTable.signed, spl = Object.values(P.fondos).reduce((a, f) => a + Math.round(f.pl * 100), 0) / 100, net = P.valor_neto - P.nocional;
+    const row = (cls, lab, sub, v, test) => `<tr class="${cls}"><th scope="row" class="first">${lab} <small>${sub}</small></th><td class="eurc" data-test="${test}">${sg(v, (x) => F.eurSigned(x))}</td></tr>`;
+    return `<div class="table-scroll mc-totw" data-test="mc-tot"><table class="ftable mc-totals"><caption class="sr-only">Resultado de la cartera nocional</caption><tfoot>
+      ${row('tf-sub', 'Total fondos', 'valor − aportado', spl, 'mc-sum-fondos')}
+      ${row('tf-cus', 'Comisión Andbank cobrada', `${esc(d.comision.comision_txt)}, cobrada al rebalancear`, -P.comision_cobrada, 'mc-com-cobrada')}
+      ${row('tf-cus', 'Comisión Andbank pendiente', 'devengada este mes, aún no cobrada', -P.comision_pendiente, 'mc-com-pend')}
+      <tr class="tf-net"><th scope="row" class="first">Resultado neto <small>= gráfico · ${pctS(p.stats.total)}</small></th><td class="eurc" data-test="mc-net">${sg(net, (x) => F.eurSigned(x))}</td></tr></tfoot></table></div>`;
   }
   function detailHtml() {
     const d = ms.d, k = ms.sel, p = d.perfiles[k];
@@ -162,21 +207,15 @@
     if (!p.serie) {
       return `<section class="panel mk-sec" data-test="mc-detail"><div class="panel-pad">${head}<p class="empty" data-test="mc-no-track">Sin track record: faltan precios de ${p.sin_datos.map(esc).join(', ') || 'algún fondo'}.</p>${compHtml(d, k)}</div></section>`;
     }
-    const st = p.stats, pub = p.rent_publicada || {};
+    const st = p.stats, com = d.comision || {};
     const met = (lab, v, sub, c) => `<div class="metric" data-test="mc-metric"><h3>${lab}<small>${sub}</small></h3><p class="v ${c || ''}">${v}</p></div>`;
     const ys = years(p.serie);
-    const PUBL = [['1m', '1 mes'], ['3m', '3 meses'], ['6m', '6 meses'], ['ytd', 'YTD'], ['1y', '1 año'], ['3y_anual', '3 años (anual.)'], ['5y_anual', '5 años (anual.)']];
-    const fr = d.fecha_rent_publicada;
-    const simAt = (key) => {
-      if (!fr) return null; const s = p.serie, e = baseIdx(s, fr); if (e < 0) return null;
-      const back = { '1m': addMonths(fr, -1), '3m': addMonths(fr, -3), '6m': addMonths(fr, -6), ytd: addDays(fr.slice(0, 4) + '-01-01', -1), '1y': addMonths(fr, -12) }[key];
-      if (!back || back < s[0][0]) return null; const b = baseIdx(s, back); return b < 0 ? null : s[e][1] / s[b][1] - 1;
-    };
     return `<section class="panel" aria-labelledby="h-mc-eq" data-test="mc-detail"><div class="panel-pad">
       <div class="eq-top">
         <div>
           <h2 class="label" id="h-mc-eq">Track record · ${esc(p.nombre)}</h2>
           <p class="big" data-test="mc-total"><span class="${cl(st.total)}">${pctS(st.total)}</span></p>
+          <p class="sub" data-test="mc-neto">Neto de la comisión de Andbank (${esc(com.comision_txt || '')}) y de los gastos de los fondos · clases limpias cuando existen</p>
           <div class="chip-row"><span class="chg" id="mc-chg"></span><span class="chip-note" id="mc-chg-note"></span></div>
         </div>
         <div class="ctrls"><div class="toggle" role="group" aria-label="Vista">
@@ -194,12 +233,11 @@
       <p class="label" style="margin-top:16px">Rentabilidad por año</p>
       <div class="mc-years" data-test="mc-years">${ys.map((y) => `<div class="${tint(y.r, 0.03, 0.08)}"><span class="m">${y.y}${y.partial ? '*' : ''}</span><span class="v">${pctS(y.r)}</span></div>`).join('')}</div>
       <p class="fine">* año incompleto (empieza el ${F.date(p.inicio)} o va hasta el ${F.date(p.fin)}).</p>
-      <p class="label" style="margin-top:16px">Simulación frente a lo publicado por Andbank${fr ? ` (a ${F.date(fr)})` : ''}</p>
-      <div class="tbl-wrap"><table class="cc-table mc-pub" data-test="mc-pub"><thead><tr><th scope="col">Periodo</th><th scope="col">Andbank</th><th scope="col">Esta app</th></tr></thead>
-        <tbody>${PUBL.filter(([kk]) => pub[kk] != null).map(([kk, lab]) => { const s = simAt(kk); return `<tr><td>${lab}</td><td class="${cl(pub[kk])}">${pctS(pub[kk])}</td><td class="${cl(s)}">${s == null ? '<span class="na">sin histórico</span>' : pctS(s)}</td></tr>`; }).join('')}</tbody></table></div>
-      <p class="label" style="margin-top:16px">Composición por tipo de fondo</p>
+      <p class="label" style="margin-top:16px">Composición por tipo de fondo · toca un tipo para ver sus fondos</p>
       ${compHtml(d, k)}
-      <p class="fine mc-method" data-test="mc-method">Cómo se calcula: ${esc(d.metodo)}${p.inicio_limitado_por ? ` El inicio (${F.date(p.inicio)}) lo marca «${esc(p.inicio_limitado_por)}», el fondo con el histórico más corto.` : ''} Andbank publica rentabilidades netas de costes subyacentes y sin comisión de gestión; las diferencias con esta simulación vienen de cambios de composición pasados y de fechas de valoración. Fuente: <a href="${esc(d.fuente_url)}" target="_blank" rel="noopener">${esc(d.fuente)}</a>. No es asesoramiento financiero.</p>
+      ${totHtml(d, p)}
+      <p class="fine">Tabla igual que la de Mi cartera, sobre una cartera nocional de ${F.eur(com.nocional_eur || 10000, 0)} invertida el ${F.date(p.inicio)} con los pesos objetivo y rebalanceada cada mes. «Participaciones» y «Valor» = posición de hoy en esa cartera; «Desde inicio» (%) = variación del VL del fondo desde el ${F.date(p.inicio)}; «€ desde inicio» = valor − aportado a ese fondo (los rebalanceos mueven dinero entre fondos). Peso % = peso actual (el objetivo se recupera el primer día hábil de cada mes). La rentabilidad de cada tipo no descuenta la comisión de Andbank; el resultado neto y el gráfico sí.</p>
+      <p class="fine mc-method" data-test="mc-method">Cómo se calcula: ${esc(d.metodo)}${p.inicio_limitado_por ? ` El inicio (${F.date(p.inicio)}) lo marca «${esc(p.inicio_limitado_por)}», el fondo con el histórico más corto.` : ''} Comisión de Andbank: ${esc(com.comision_txt || '')}. ${esc(com.comision_fuente || '')} Fuente de la composición: <a href="${esc(d.fuente_url)}" target="_blank" rel="noopener">${esc(d.fuente)}</a>. No es asesoramiento financiero.</p>
     </div></section>`;
   }
   function drawPeriods(p) {
@@ -245,6 +283,19 @@
       <div class="cal-grid" role="list" data-test="mc-days" aria-label="Rentabilidad diaria de ${MESES[mo - 1]} ${y}">${cells.join('')}</div>`;
     const sc = area.querySelector('.cal-months'), act = sc.querySelector('[aria-pressed="true"]'); if (act) sc.scrollLeft = act.offsetLeft - sc.clientWidth / 2;
   }
+  function redrawComp() { const box = $('[data-test=mc-comp]'); if (!box) return; const tmp = document.createElement('div'); tmp.innerHTML = compHtml(ms.d, ms.sel); box.replaceWith(tmp.firstElementChild); }
+  function openFund(id) {
+    const d = ms.d, p = d.perfiles[ms.sel]; let f = null, tipo = '';
+    d.tipos.forEach((c) => c.fondos.forEach((x) => { if ((x.isin || x.nombre) === id) { f = x; tipo = c.tipo; } }));
+    if (!f) return; const x = ((p.posicion || {}).fondos || {})[f.isin] || {};
+    const dl = [['Tipo', tipo], ['ISIN', f.isin ? f.isin + ' (no lo publica Andbank; resuelto por el nombre de la clase)' : 'no disponible'], ['Clase', (CLASE_TXT[f.clase] || 'no verificada') + (f.clase_nota ? ' — ' + f.clase_nota : '')],
+      ['Peso objetivo', F.num(f.pesos[ms.sel], 2) + ' %'], ['Peso actual', x.peso != null ? F.pct(x.peso) : '—'],
+      ['VL al inicio', x.vl_inicio != null ? F.num(x.vl_inicio, 2) + ' € (' + F.date(p.inicio) + ')' : '—'], ['VL actual', x.vl != null ? F.num(x.vl, 2) + ' € (' + F.date(x.fecha_vl) + ')' : '—'], ['Fuente del ISIN', f.isin_fuente || '—']];
+    $('#sheet-body').innerHTML = `<div class="sheet-top"><p class="dtag">${esc(tipo)} · ${esc(p.nombre)}</p><button type="submit" class="icon-btn" value="close" aria-label="Cerrar detalle">✕</button></div><h2 id="sheet-title">${esc(f.nombre)}</h2>
+      <div class="sheet-nums"><div><span>Valor (nocional)</span><b>${x.valor != null ? F.eur(x.valor) : '—'}</b></div><div><span>Peso</span><b>${x.peso != null ? F.pct(x.peso) : '—'}</b></div><div><span>Desde inicio</span><b class="nw">${x.pl != null ? window.CFTable.signed(x.pl, F.eurSigned) : '—'}</b><b class="nw">${x.plp != null ? window.CFTable.signed(x.plp, F.pctSigned) : '—'}</b></div></div>
+      <dl class="dl">${dl.map(([k, v]) => `<div><dt>${esc(k)}</dt><dd>${esc(v)}</dd></div>`).join('')}</dl>`;
+    const dlg = $('#sheet'); dlg.showModal ? dlg.showModal() : dlg.setAttribute('open', ''); dlg.scrollTop = 0;
+  }
   function drawDetail() {
     const box = $('#mc-detail'); if (!box || !ms.d) return;
     const p = ms.d.perfiles[ms.sel];
@@ -277,7 +328,10 @@
       const t = ev.target.closest('button'); if (!t) return;
       const refocus = (sel) => { const b = $(sel); b && b.focus(); };
       if (t.dataset.ccFreq) { cs.freq = t.dataset.ccFreq; root.querySelectorAll('[data-cc-freq]').forEach((b) => b.setAttribute('aria-pressed', String(b === t))); drawCalc(); }
-      else if (t.dataset.mc != null) { ms.sel = +t.dataset.mc; ms.month = null; root.querySelectorAll('[data-mc]').forEach((b) => b.setAttribute('aria-pressed', String(b === t))); drawDetail(); }
+      else if (t.dataset.mcSec) { const k = t.dataset.mcSec; ms.open.has(k) ? ms.open.delete(k) : ms.open.add(k); redrawComp(); refocus(`[data-mc-sec="${CSS.escape(k)}"]`); }
+      else if (t.dataset.sort && t.closest('[data-test=mc-comp]')) { ms.sort = t.dataset.sort; const k = t.closest('[data-tipo]').dataset.tipo; redrawComp(); refocus(`[data-tipo="${CSS.escape(k)}"] [data-sort="${ms.sort}"]`); }
+      else if (t.dataset.mcFund) openFund(t.dataset.mcFund);
+      else if (t.dataset.mc != null) { ms.sel = +t.dataset.mc; ms.month = null; ms.open = new Set(); root.querySelectorAll('[data-mc]').forEach((b) => b.setAttribute('aria-pressed', String(b === t))); drawDetail(); }
       else if (t.dataset.mcView) { ms.view = t.dataset.mcView; drawDetail(); refocus(`[data-mc-view="${ms.view}"]`); }
       else if (t.dataset.mcPeriod) { ms.period = t.dataset.mcPeriod; ms.view = 'graph'; drawDetail(); refocus(`[data-mc-period="${ms.period}"]`); }
       else if (t.dataset.mcMonth) { ms.month = t.dataset.mcMonth; drawDetail(); refocus(`[data-mc-month="${ms.month}"]`); }
