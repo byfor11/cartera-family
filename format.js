@@ -15,7 +15,11 @@
     eurSigned: (x, dec = 2) => (x > 0 ? '+' : '') + F.eur(x, dec),
     pct: (x, dec = 2) => (x === null || x === undefined ? '—' : num(x * 100, dec) + '\u00a0%'),
     pctSigned: (x, dec = 2) => (x > 0 ? '+' : '') + F.pct(x, dec),
-    date: (iso) => { if (!iso) return '—'; const [y, m, d] = iso.split('-'); return `${d}/${m}/${y}`; },
+    /* v20: dateDM = 20/11; when = 24/11/2026, 22:42 a partir de un ISO (con o sin hora). No usan Date(), así no hay desfases de zona. */
+    ymd: (iso) => { const m = String(iso || '').match(/(\d{4})-(\d{2})-(\d{2})(?:[T ](\d{2}):(\d{2}))?/); return m ? { y: m[1], mo: m[2], d: m[3], h: m[4], mi: m[5] } : null; },
+    date: (iso) => { const t = F.ymd(iso); return t ? `${t.d}/${t.mo}/${t.y}` : '—'; },
+    dateDM: (iso) => { const t = F.ymd(iso); return t ? `${t.d}/${t.mo}` : '—'; },
+    when: (iso) => { const t = F.ymd(iso); if (!t) return '—'; return t.h ? `${t.d}/${t.mo}/${t.y}, ${t.h}:${t.mi}` : `${t.d}/${t.mo}/${t.y}`; },
     dateLong: (iso) => {
       if (!iso) return '—';
       const M = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'];

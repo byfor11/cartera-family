@@ -35,6 +35,21 @@
   }
   tickClock(); setInterval(tickClock, 1000);
 
+  /* v20: dos fechas distintas y visibles: día de los datos (último día COMPLETO) y momento en que se actualizó la app. */
+  function setDataStamp(d) {
+    const datos = F.date(d.fecha_datos), act = F.when(d.generado);
+    const foot = $('#foot-date');
+    if (foot) { foot.innerHTML = `<span data-test="foot-datos">Datos a ${datos}</span><span class="dot" aria-hidden="true">·</span><span data-test="foot-act">actualizado el ${act}</span>`; }
+    const st = $('#data-stamp');
+    if (st) {
+      const t = F.ymd(d.generado), short = t ? (t.h ? `${t.d}/${t.mo} ${t.h}:${t.mi}` : `${t.d}/${t.mo}`) : '—';
+      st.hidden = false;
+      st.innerHTML = `<span data-test="stamp-datos">Datos ${F.dateDM(d.fecha_datos)}</span><span class="dot" aria-hidden="true">·</span><span data-test="stamp-act">act. ${short}</span>`;
+      st.setAttribute('title', `Datos a ${datos} (último día completo). Actualizado el ${act} (hora de Madrid).`);
+    }
+  }
+
+
   /* ---------- Periodos ---------- */
   function addDays(iso, n) { const d = new Date(iso + 'T12:00:00Z'); d.setUTCDate(d.getUTCDate() + n); return d.toISOString().slice(0, 10); }
   function addMonths(iso, n) { const d = new Date(iso + 'T12:00:00Z'); d.setUTCMonth(d.getUTCMonth() + n); return d.toISOString().slice(0, 10); }
@@ -140,6 +155,7 @@
     };
     const tipText = (i) => `${F.date(dates[i])}. Valor ${F.eur(s[i].v)}.${cus[i] > 0.004 ? ` Custodia Fidelity acumulada ${F.eur(cus[i])}.` : ''} ${baseName} ${F.eur(baseEur[i])}. ${gain[i] >= 0 ? 'Ganancia' : 'Pérdida'} ${F.eurSigned(gain[i])}, ${F.pctSigned(gpct[i])}. Rentabilidad TWR ${F.pctSigned(twr[i])}.` + (iniAt[i] ? ` Aportación a ${iniAt[i].plataforma} el ${F.date(iniAt[i].f_aportacion)}: ${F.eur(iniAt[i].importe)}.` : '') + (state.ovl.bench ? ` Benchmark ${F.pctSigned(bench[i])}.` : '');
     const opts = {
+      xFmt: (f) => F.dateDM(f),
       yFmt: (y, step) => (Math.abs(y) < 1e-12 ? '0%' : F.num(y * 100, decFor(step * 100)) + '%'),
       tipHtml, tipText, points, areaBase: 0, baseline: {},
       ariaLabel: `Ganancia o pérdida sobre ${isAll ? 'el capital aportado' : 'la base del periodo'} del ${F.date(dates[0])} al ${F.date(dates[L])}: la línea de la cartera va por encima de la línea de capital aportado cuando hay ganancia y por debajo cuando hay pérdida. Termina en ${F.pctSigned(gpct[L])} (${F.eurSigned(gain[L])}) sobre ${F.eur(baseEur[L], 0)}. Mínimo ${F.pctSigned(Math.min(...gpct))}, máximo ${F.pctSigned(Math.max(...gpct))}.`
@@ -154,6 +170,9 @@
       </div><button type="button" class="ovl" data-ovl="bench" aria-pressed="${state.ovl.bench}"><i class="sw" aria-hidden="true"></i>Benchmark</button></div><div id="chart"></div>
       <p class="fine">${isAll ? 'La línea discontinua es el dinero aportado' : 'La línea discontinua es el valor neto al inicio del periodo más lo aportado después'}: la cartera va <b class="pos">por encima</b> cuando ganas y <b class="neg">por debajo</b> cuando pierdes (% = resultado neto, ya restada la custodia de Fidelity, ÷ ${isAll ? 'lo aportado' : 'esa base'}; es la misma cifra que la rentabilidad neta). Toca o arrastra el gráfico para ver cada día los € y la rentabilidad TWR.${state.ovl.bench ? ` Benchmark: el mismo dinero, con las mismas aportaciones, en un índice de igual composición (${esc(d.benchmark.pesos_hoy_txt)} hoy).` : ''}</p>`;
     lineChart($('#chart'), { dates, series, ...opts });
+    const cap = document.createElement('p'); cap.className = 'fine chart-asof'; cap.setAttribute('data-test', 'chart-asof');
+    cap.innerHTML = `Último día del gráfico: <b>${F.date(dates[L])}</b> (mismo que «Datos a»). El eje solo marca días con valor liquidativo; no se inventan sábados, domingos ni días incompletos.`;
+    area.appendChild(cap);
   }
 
   /* ---------- Calendario ---------- */
@@ -359,7 +378,8 @@
   function footerHtml(d) {
     const b = d.benchmark, lr = d.libre_riesgo;
     return `<section class="card foot" aria-labelledby="h-foot"><h2 id="h-foot">Datos, fuentes y avisos</h2>
-      <p>Datos a <b>${F.dateLong(d.fecha_datos)}</b>. ${esc(d.fecha_datos_nota || '')} Generado el ${esc(d.generado.replace('T', ' '))} (hora de Madrid).</p>
+      <p>Datos a <b data-test="datos-a">${F.dateLong(d.fecha_datos)}</b> (último día con el valor liquidativo de todos los fondos). ${esc(d.fecha_datos_nota || '')}</p>
+      <p>Actualizado el <b data-test="actualizado">${F.when(d.generado)}</b> (hora de Madrid): es cuando se reconstruyó esta versión, no un día extra de la cartera.</p>
       <h3>Avisos</h3><ul>${d.avisos.map((a) => `<li>${esc(a)}</li>`).join('')}</ul>
       <h3>Fuentes</h3><ul><li>Posiciones, histórico y comisiones: bot Cartera Family (VL de FT Markets, quefondos y las gestoras).</li>
       <li>Tipo sin riesgo: <a href="${esc(lr.web)}" target="_blank" rel="noopener">€STR, Banco Central Europeo</a>.</li>
@@ -421,9 +441,9 @@
   function render(d, key) {
     state.data = d;
     $('#lock-btn').hidden = false;
-    $('#foot-date').textContent = 'Datos a ' + F.date(d.fecha_datos);
+    setDataStamp(d);
     const app = $('#app');
-    app.innerHTML = `<div id="tab-cartera" role="tabpanel" aria-labelledby="tabbtn-cartera" ${state.tab === 'cartera' ? '' : 'hidden'}><div class="page-h"><h1>Resumen de la cartera</h1><p>Histórico y métricas de la Cartera Family · datos a ${F.date(d.fecha_datos)}</p></div>`
+    app.innerHTML = `<div id="tab-cartera" role="tabpanel" aria-labelledby="tabbtn-cartera" ${state.tab === 'cartera' ? '' : 'hidden'}><div class="page-h"><h1>Resumen de la cartera</h1><p data-test="page-dates">Histórico y métricas de la Cartera Family · datos a ${F.date(d.fecha_datos)} (último día completo) · actualizado el ${F.when(d.generado)}</p></div>`
       + equityPanel(d) + kpisHtml(d) + positionsPanel(d) + footerHtml(d) + `</div><div id="tab-actualidad" role="tabpanel" aria-labelledby="tabbtn-actualidad" ${state.tab === 'actualidad' ? '' : 'hidden'}></div><div id="tab-gestion" role="tabpanel" aria-labelledby="tabbtn-gestion" ${state.tab === 'gestion' ? '' : 'hidden'}></div>`;
     app.setAttribute('aria-busy', 'false');
     drawEquity(); drawTable();
