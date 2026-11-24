@@ -4,7 +4,7 @@
 (function () {
   const esc = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   const $ = (s, r = document) => r.querySelector(s), $$ = (s, r = document) => [...r.querySelectorAll(s)];
-  const st = { open: null, per: {}, fg: '1y', sec: '1d', news: 'all', ag: 'all', newsAll: false, m: null };
+  const st = { open: null, per: {}, fg: '1d', sec: '1d', news: 'all', ag: 'all', newsAll: false, m: null };
   const FLAG = { us: ['🇺🇸', 'EE. UU.'], es: ['🇪🇸', 'España'], eu: ['🇪🇺', 'Zona euro'] };
   const flag = (p) => (FLAG[p] ? `<span class="flag" role="img" aria-label="${FLAG[p][1]}">${FLAG[p][0]}</span>` : '');
   const DIAS = ['domingo', 'lunes', 'martes', 'miércoles', 'jueves', 'viernes', 'sábado'];
@@ -17,7 +17,7 @@
   const PN = { '1d': ['1D', '1 día'], '1w': ['1S', '1 semana'], '1m': ['1M', '1 mes'], '3m': ['3M', '3 meses'], '6m': ['6M', '6 meses'], ytd: ['YTD', 'en el año'], '1y': ['1A', '1 año'], '5y': ['5A', '5 años'] };
   const MK_P = ['1d', '1w', '1m', '3m', 'ytd', '1y', '5y'];
   const SEC_P = ['1d', '1w', '1m', '3m', 'ytd', '1y'];
-  const FG_P = ['1m', '3m', '6m', '1y'];
+  const FG_P = ['1d', '1w', '1m', '3m', '6m', '1y'];
 
   function stamp(sec, extra) {
     if (!sec) return '';
@@ -188,27 +188,70 @@
       <line x1="${cx}" y1="${cy}" x2="${nx.toFixed(1)}" y2="${ny.toFixed(1)}" class="needle"/><circle cx="${cx}" cy="${cy}" r="7" class="hub"/>
     </svg>`;
   }
+  /* v15: un solo selector mueve indicador y gráfico. 1D = indicador con el valor del día y su cambio frente al cierre anterior;
+     1S…1A = rango del periodo («varilla» 0–100 con zonas de color, tramo mínimo–máximo resaltado y marca del valor actual). */
+  function fgPeriodPts(s, p) {
+    if (p === '1d') return s.serie.slice(-5);  // CNN no publica serie intradía: últimos 5 días como contexto
+    const last = s.serie[s.serie.length - 1][0], d = new Date(last + 'T12:00:00Z');
+    if (p === '1w') d.setUTCDate(d.getUTCDate() - 7);
+    else d.setUTCMonth(d.getUTCMonth() - { '1m': 1, '3m': 3, '6m': 6, '1y': 12 }[p]);
+    const from = d.toISOString().slice(0, 10);
+    return s.serie.filter((x) => x[0] >= from);
+  }
+  function fgStats(pts) {
+    let mn = pts[0], mx = pts[0];
+    pts.forEach((x) => { if (x[1] < mn[1]) mn = x; if (x[1] > mx[1]) mx = x; });  // primera fecha en caso de empate
+    return { mn, mx, start: pts[0], cur: pts[pts.length - 1] };
+  }
+  const chgPts = (d) => `${d > 0 ? '+' : ''}${F.num(d, 1)}`;
+  function rangeBar(st_) {
+    const W = 300, x = (v) => 10 + (v / 100) * (W - 20), y = 26, h = 12;
+    const a = x(st_.mn[1]), b = x(st_.mx[1]), c = x(st_.cur[1]);
+    return `<svg viewBox="0 0 ${W} 62" class="fg-rbar" data-test="fg-rbar" data-min="${st_.mn[1]}" data-max="${st_.mx[1]}" role="img" aria-label="Rango del índice en el periodo: mínimo ${F.num(st_.mn[1], 0)} (${fgLabel(st_.mn[1])}), máximo ${F.num(st_.mx[1], 0)} (${fgLabel(st_.mx[1])}), actual ${F.num(st_.cur[1], 0)}.">
+      <defs><linearGradient id="fg-rgrad" x1="${a}" x2="${b}" gradientUnits="userSpaceOnUse">${[st_.mn[1], st_.mx[1]].map((v, i) => `<stop offset="${i}" stop-color="${{ z1: '#e11d48', z2: '#f97316', z3: '#9ca3af', z4: '#22c55e', z5: '#059669' }[fgZone(v)]}"/>`).join('')}</linearGradient></defs>
+      ${FGZ.map(([z0, z1_, , z]) => `<rect class="rz ${z}" x="${x(z0) + 0.5}" y="${y}" width="${x(z1_) - x(z0) - 1}" height="${h}" rx="3"/>`).join('')}
+      <rect class="rseg" x="${a.toFixed(1)}" y="${y - 3}" width="${Math.max(3, b - a).toFixed(1)}" height="${h + 6}" rx="5"/>
+      <rect class="rend" x="${(a - 1).toFixed(1)}" y="${y - 6}" width="2" height="${h + 12}"/><rect class="rend" x="${(b - 1).toFixed(1)}" y="${y - 6}" width="2" height="${h + 12}"/>
+      <path class="rcur" d="M${c.toFixed(1)} ${y - 4}l-6 -10h12z"/><text class="rcl" x="${Math.min(W - 14, Math.max(14, c)).toFixed(1)}" y="${y - 16}" text-anchor="middle">${F.num(st_.cur[1], 0)}</text>
+      ${[0, 25, 50, 75, 100].map((t) => `<text class="rlab" x="${x(t)}" y="${y + h + 14}" text-anchor="middle">${t}</text>`).join('')}
+    </svg>`;
+  }
   function fgHtml(m) {
     const s = m.sentimiento;
     if (!s) return `<section class="panel mk-sec" aria-labelledby="h-mk-fg"><div class="panel-pad">${secHead('h-mk-fg', ICO.fg, 'Sentimiento de mercado')}<p class="empty">Sin datos.</p></div></section>`;
-    const prev = [['cierre', 'Cierre anterior'], ['1w', 'Hace 1 semana'], ['1m', 'Hace 1 mes'], ['1y', 'Hace 1 año']];
     return `<section class="panel mk-sec" aria-labelledby="h-mk-fg" data-test="mk-fg"><div class="panel-pad">
-      ${secHead('h-mk-fg', ICO.fg, 'Sentimiento · Fear &amp; Greed', 'Índice de miedo y codicia de CNN (0 = miedo extremo, 100 = codicia extrema), calculado con 7 indicadores del mercado de EE. UU. La barra de periodos cambia el histórico.', pillbar(FG_P, st.fg, 'data-fg-period', 'Periodo del histórico Fear & Greed'))}
+      ${secHead('h-mk-fg', ICO.fg, 'Sentimiento · Fear &amp; Greed', 'Índice de miedo y codicia de CNN (0 = miedo extremo, 100 = codicia extrema), calculado con 7 indicadores del mercado de EE. UU. En 1D se ve el valor del día; en 1S…1A, el rango (mínimo–máximo) del periodo.', pillbar(FG_P, st.fg, 'data-fg-period', 'Periodo del índice Fear & Greed'))}
       ${stamp(s, 'Dato ' + when(s.hora))}
-      <div class="fg-top"><div class="fg-gauge">${gauge(s.valor)}<p class="fg-v"><b data-test="fg-value" class="${fgZone(s.valor)}">${F.num(s.valor, 0)}</b><span data-test="fg-label">${esc(s.etiqueta)}</span></p></div>
-        <div class="fg-prev" role="list">${prev.map(([k, t]) => { const v = s.anterior[k]; return `<div role="listitem" data-test="fg-prev-${k}"><span>${t}</span><b class="${v == null ? '' : fgZone(v)}">${v == null ? '—' : F.num(v, 0)}</b><small>${v == null ? '' : fgLabel(v)}</small></div>`; }).join('')}</div></div>
+      <div id="fg-top" aria-live="polite"></div>
       <h3 class="mk-h3">Histórico <span class="fg-per" id="fg-per"></span></h3>
       <div id="fg-chart" class="fg-chart"></div>
       <p class="mk-src">Fuente: ${credit(s.fuente, s.fuente_url)}. Gráfico redibujado con los datos públicos del índice.</p>
     </div></section>`;
   }
+  function fgTopDay(s) {
+    const prev = [['cierre', 'Cierre anterior'], ['1w', 'Hace 1 semana'], ['1m', 'Hace 1 mes'], ['1y', 'Hace 1 año']];
+    const pc = s.anterior.cierre, d = pc == null ? null : s.valor - pc;
+    return `<div class="fg-top" data-test="fg-day"><div class="fg-gauge">${gauge(s.valor)}<p class="fg-v"><b data-test="fg-value" class="${fgZone(s.valor)}">${F.num(s.valor, 0)}</b><span data-test="fg-label">${esc(s.etiqueta)}</span>
+        ${d == null ? '' : `<span class="fg-chg" data-test="fg-chg"><b class="${sgn(d)}">${chgPts(d)}</b> frente al cierre anterior (${F.num(pc, 0)})</span>`}</p></div>
+      <div class="fg-prev" role="list">${prev.map(([k, t]) => { const v = s.anterior[k]; return `<div role="listitem" data-test="fg-prev-${k}"><span>${t}</span><b class="${v == null ? '' : fgZone(v)}">${v == null ? '—' : F.num(v, 0)}</b><small>${v == null ? '' : fgLabel(v)}</small></div>`; }).join('')}</div></div>`;
+  }
+  function fgTopRange(s, pts) {
+    const t = fgStats(pts), d = t.cur[1] - t.start[1];
+    const box = (k, lab, x, extra) => `<div role="listitem" data-test="fg-${k}"><span>${lab}</span><b class="${fgZone(x[1])}">${F.num(x[1], 0)}</b><small>${fgLabel(x[1])}</small><small class="dt" data-test="fg-${k}-date">${F.date(x[0])}</small>${extra || ''}</div>`;
+    return `<div class="fg-top" data-test="fg-range"><div class="fg-range">
+        <div class="fg-rh"><h3>Rango · ${PN[st.fg][1]}</h3><span class="fg-rv" data-test="fg-range-v"><b class="${fgZone(t.mn[1])}">${F.num(t.mn[1], 0)}</b><small>–</small><b class="${fgZone(t.mx[1])}">${F.num(t.mx[1], 0)}</b></span></div>
+        ${rangeBar(t)}
+        <div class="fg-rleg"><span>Miedo extremo</span><span>Neutral</span><span>Codicia extrema</span></div>
+        <p class="fine">Hoy <b class="${fgZone(t.cur[1])}" data-test="fg-cur">${F.num(t.cur[1], 0)}</b> (${fgLabel(t.cur[1])}) · cambio en el periodo <b class="${sgn(d)}" data-test="fg-per-chg">${chgPts(d)}</b> puntos.</p></div>
+      <div class="fg-prev" role="list">${box('min', 'Mínimo', t.mn)}${box('max', 'Máximo', t.mx)}${box('start', 'Inicio del periodo', t.start)}
+        <div role="listitem" data-test="fg-chgbox"><span>Cambio en el periodo</span><b class="chg ${sgn(d)}">${chgPts(d)}</b><small>de ${F.num(t.start[1], 0)} a ${F.num(t.cur[1], 0)}</small><small class="dt">puntos (0–100)</small></div></div></div>`;
+  }
   function drawFg() {
     const s = st.m && st.m.sentimiento; if (!s) return;
     $$('[data-fg-period]').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.fgPeriod === st.fg)));
-    const last = s.serie[s.serie.length - 1][0], d = new Date(last + 'T12:00:00Z');
-    const back = { '1m': 1, '3m': 3, '6m': 6, '1y': 12 }[st.fg]; d.setUTCMonth(d.getUTCMonth() - back);
-    $('#fg-per').textContent = '· ' + PN[st.fg][1];
-    const from = d.toISOString().slice(0, 10); const pts = s.serie.filter((x) => x[0] >= from);
+    const pts = fgPeriodPts(s, st.fg);
+    $('#fg-top').innerHTML = st.fg === '1d' ? fgTopDay(s) : fgTopRange(s, pts);
+    $('#fg-per').textContent = st.fg === '1d' ? '· últimos 5 días (CNN no publica datos intradía)' : '· ' + PN[st.fg][1];
     const dates = pts.map((x) => x[0]), vals = pts.map((x) => x[1]);
     lineChart($('#fg-chart'), {
       dates, h: 190, nTicks: 4, yRange: [0, 100], padL: 34,
@@ -219,6 +262,7 @@
       tipText: (i) => `${F.date(dates[i])}. Fear & Greed ${F.num(vals[i], 0)}, ${fgLabel(vals[i])}.`,
       ariaLabel: `Histórico del índice Fear & Greed desde el ${F.date(dates[0])}: mínimo ${F.num(Math.min(...vals), 0)}, máximo ${F.num(Math.max(...vals), 0)}, último ${F.num(vals[vals.length - 1], 0)}.`,
     });
+    const svg = $('#fg-chart svg.chart'); if (svg) { svg.dataset.from = dates[0]; svg.dataset.to = dates[dates.length - 1]; svg.dataset.n = dates.length; }
   }
 
   /* ---------- Sectores ---------- */
