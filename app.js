@@ -51,11 +51,17 @@
     ];
     return defs.map((p) => ({ ...p, ...change(s, p.base, L), twr: s[L].t / (p.base < 0 ? 1 : s[p.base].t) - 1 }));
   }
-  /* Variación de un periodo SIN aportaciones, sobre total_valor (lo mismo que dibuja el gráfico):
-     € = V_fin − V_base − aportaciones;  % = € / (V_base + aportaciones).  b = -1 → desde antes del inicio (valor 0). */
+  /* v12: resultado NETO de cada día = rentab_neta_eur de la fuente = valor − invertido − custodia Fidelity acumulada
+     (si faltara en la fuente, se calcula con esa misma fórmula). */
+  function netPl(p) { return p.pl != null ? p.pl : p.v - p.i - (p.c || 0); }
+  /* Valor neto de custodia (= invertido + resultado neto) */
+  function netV(p) { return p.i + netPl(p); }
+  /* Variación de un periodo SIN aportaciones, neta de custodia (lo mismo que dibuja el gráfico y la tarjeta de rentabilidad neta):
+     € = Vneto_fin − Vneto_base − aportaciones = neto_fin − neto_base;  % = € / (Vneto_base + aportaciones).
+     b = -1 → desde antes del inicio (valor 0): € = rentab_neta_eur, % = € / aportado. */
   function change(s, b, e) {
-    const v0 = b >= 0 ? s[b].v : 0, i0 = b >= 0 ? s[b].i : 0, flows = s[e].i - i0;
-    const eur = s[e].v - v0 - flows; const den = v0 + flows;
+    const i0 = b >= 0 ? s[b].i : 0, flows = s[e].i - i0;
+    const eur = netPl(s[e]) - (b >= 0 ? netPl(s[b]) : 0); const den = (b >= 0 ? netV(s[b]) : 0) + flows;
     return { eur: Math.round(eur * 100) / 100, pct: den ? eur / den : 0, flows };
   }
 
@@ -92,7 +98,7 @@
     const chg = $('#chg');
     chg.className = 'chg ' + F.sign(cur.eur);
     chg.innerHTML = `<span><span aria-hidden="true">${arrow(cur.eur)} </span>${F.pctSigned(cur.pct)}</span><span class="sep" aria-hidden="true">|</span><span>${F.eurSigned(cur.eur)}</span>`;
-    $('#chg-note').innerHTML = `${esc(cur.note)} · ganancia sobre lo aportado · <span class="twr-note">TWR ${F.pctSigned(cur.twr)}</span>`;
+    $('#chg-note').innerHTML = `${esc(cur.note)} · resultado neto sobre lo aportado · <span class="twr-note">TWR ${F.pctSigned(cur.twr)}</span>`;
     $$('[data-view]').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.view === state.view)));
     if (state.view === 'calendar') { drawCalendar(area); return; }
     const S = d.serie, bIdx = cur.base, b0 = Math.max(0, bIdx);
@@ -100,11 +106,12 @@
     const dates = s.map((p) => p.f), L = s.length - 1;
     const ch = s.map((p, k) => change(S, bIdx, b0 + k));
     const gpct = ch.map((c) => c.pct), gain = ch.map((c) => c.eur);
-    const v0 = bIdx < 0 ? 0 : S[bIdx].v, i0 = bIdx < 0 ? 0 : S[bIdx].i;
-    const baseEur = s.map((p) => v0 + (p.i - i0));               // capital aportado (o capital al inicio del periodo + aportaciones)
+    const v0 = bIdx < 0 ? 0 : netV(S[bIdx]), i0 = bIdx < 0 ? 0 : S[bIdx].i;
+    const baseEur = s.map((p) => v0 + (p.i - i0));               // capital aportado (o valor neto al inicio del periodo + aportaciones)
+    const cus = s.map((p) => p.v - netV(p));                     // custodia Fidelity acumulada (valor − valor neto)
     const twr = s.map((p) => p.t / t0 - 1);
     // Benchmark con el mismo dinero y las mismas aportaciones, medido igual que la cartera
-    const bv = [bIdx < 0 ? s[0].i : s[0].v];
+    const bv = [baseEur[0]];
     for (let k = 1; k < s.length; k++) bv.push(bv[k - 1] * (s[k].b / s[k - 1].b) + (s[k].i - s[k - 1].i));
     const bench = bv.map((x, k) => (baseEur[k] ? (x - baseEur[k]) / baseEur[k] : 0));
     const isAll = bIdx < 0;
@@ -122,6 +129,7 @@
       const m = iniAt[i], fl = i > 0 ? s[i].i - s[i - 1].i : (isAll ? s[0].i : 0);
       return `<strong>${F.date(dates[i])}</strong>`
         + row('val', 'Valor', F.eur(s[i].v))
+        + (cus[i] > 0.004 ? row('cus', 'Custodia Fidelity', F.eurSigned(-cus[i])) : '')
         + row('inv', baseName, F.eur(baseEur[i]))
         + row('', gain[i] >= 0 ? 'Ganancia' : 'Pérdida', `${F.eurSigned(gain[i])} (${F.pctSigned(gpct[i])})`, F.sign(gain[i]))
         + row('gain', 'Rentabilidad TWR', F.pctSigned(twr[i]), F.sign(twr[i]))
@@ -130,7 +138,7 @@
              + `<span class="tip-sub">Compras de fondos: ${m.compras.map(dm).join(' · ')}</span>`
            : fl > 0.005 && i > 0 ? `<span class="tip-sub">Compras de fondos del día: ${F.eur(fl)}</span>` : '');
     };
-    const tipText = (i) => `${F.date(dates[i])}. Valor ${F.eur(s[i].v)}. ${baseName} ${F.eur(baseEur[i])}. ${gain[i] >= 0 ? 'Ganancia' : 'Pérdida'} ${F.eurSigned(gain[i])}, ${F.pctSigned(gpct[i])}. Rentabilidad TWR ${F.pctSigned(twr[i])}.` + (iniAt[i] ? ` Aportación a ${iniAt[i].plataforma} el ${F.date(iniAt[i].f_aportacion)}: ${F.eur(iniAt[i].importe)}.` : '') + (state.ovl.bench ? ` Benchmark ${F.pctSigned(bench[i])}.` : '');
+    const tipText = (i) => `${F.date(dates[i])}. Valor ${F.eur(s[i].v)}.${cus[i] > 0.004 ? ` Custodia Fidelity acumulada ${F.eur(cus[i])}.` : ''} ${baseName} ${F.eur(baseEur[i])}. ${gain[i] >= 0 ? 'Ganancia' : 'Pérdida'} ${F.eurSigned(gain[i])}, ${F.pctSigned(gpct[i])}. Rentabilidad TWR ${F.pctSigned(twr[i])}.` + (iniAt[i] ? ` Aportación a ${iniAt[i].plataforma} el ${F.date(iniAt[i].f_aportacion)}: ${F.eur(iniAt[i].importe)}.` : '') + (state.ovl.bench ? ` Benchmark ${F.pctSigned(bench[i])}.` : '');
     const opts = {
       yFmt: (y, step) => (Math.abs(y) < 1e-12 ? '0%' : F.num(y * 100, decFor(step * 100)) + '%'),
       tipHtml, tipText, points, areaBase: 0, baseline: {},
@@ -144,7 +152,7 @@
         <span class="lg-gl"><i class="gl pos" aria-hidden="true"></i>gana <i class="gl neg" aria-hidden="true"></i>pierde</span>
         ${ini.length ? '<span><i class="ptsw" aria-hidden="true"></i><span class="lg">Aportaciones</span><span class="sh">Aportación</span></span>' : ''}
       </div><button type="button" class="ovl" data-ovl="bench" aria-pressed="${state.ovl.bench}"><i class="sw" aria-hidden="true"></i>Benchmark</button></div><div id="chart"></div>
-      <p class="fine">${isAll ? 'La línea discontinua es el dinero aportado' : 'La línea discontinua es el valor al inicio del periodo más lo aportado después'}: la cartera va <b class="pos">por encima</b> cuando ganas y <b class="neg">por debajo</b> cuando pierdes (% = ganancia ÷ ${isAll ? 'lo aportado' : 'esa base'}). Toca o arrastra el gráfico para ver cada día los € y la rentabilidad TWR.${state.ovl.bench ? ` Benchmark: el mismo dinero, con las mismas aportaciones, en un índice de igual composición (${esc(d.benchmark.pesos_hoy_txt)} hoy).` : ''}</p>`;
+      <p class="fine">${isAll ? 'La línea discontinua es el dinero aportado' : 'La línea discontinua es el valor neto al inicio del periodo más lo aportado después'}: la cartera va <b class="pos">por encima</b> cuando ganas y <b class="neg">por debajo</b> cuando pierdes (% = resultado neto, ya restada la custodia de Fidelity, ÷ ${isAll ? 'lo aportado' : 'esa base'}; es la misma cifra que la rentabilidad neta). Toca o arrastra el gráfico para ver cada día los € y la rentabilidad TWR.${state.ovl.bench ? ` Benchmark: el mismo dinero, con las mismas aportaciones, en un índice de igual composición (${esc(d.benchmark.pesos_hoy_txt)} hoy).` : ''}</p>`;
     lineChart($('#chart'), { dates, series, ...opts });
   }
 
@@ -257,7 +265,7 @@
         <div class="filters"><label class="search"><span class="sr-only">Buscar fondo, ISIN o plataforma</span>${ICON.search}<input id="q" type="search" placeholder="Buscar fondo o ISIN…" autocomplete="off" value="${esc(state.q)}"></label>
         <label><span class="sr-only">Filtrar por tipo</span><select id="tipo"><option value="">Todos los tipos</option>${tipos.map((t) => `<option value="${esc(t)}">${esc(t)}</option>`).join('')}</select></label></div></div>
       <div class="table-scroll" role="region" aria-label="Tabla de fondos, desliza en horizontal" tabindex="0" id="ftable"></div>
-      <div class="pos-foot"><p class="fine">«Cantidad comprada» = participaciones compradas (no ha habido ventas, así que son las que se tienen hoy). «Precio actual (NAV)» = valor liquidativo por participación a ${F.date(d.fecha_datos)}; si es de otra fecha se indica debajo. Valor = cantidad × NAV. <span class="mark">†</span> Participaciones estimadas (aportado / NAV de compra). <span class="mark">‡</span> Fecha de compra aproximada, deducida por VL. «Desde compra» y «€ desde compra» = valor − invertido de cada fondo (antes de la custodia externa); el total es valor − aportado de toda la cartera, el mismo importe del gráfico. «Diario» = variación del último día del histórico (${F.date(d.fecha_datos)}). Tendencia: NAV desde la compra.</p></div>
+      <div class="pos-foot"><p class="fine">«Cantidad comprada» = participaciones compradas (no ha habido ventas, así que son las que se tienen hoy). «Precio actual (NAV)» = valor liquidativo por participación a ${F.date(d.fecha_datos)}; si es de otra fecha se indica debajo. Valor = cantidad × NAV. <span class="mark">†</span> Participaciones estimadas (aportado / NAV de compra). <span class="mark">‡</span> Fecha de compra aproximada, deducida por VL. «Desde compra» y «€ desde compra» = valor − invertido de cada fondo (antes de la custodia externa). «Total fondos» es su suma (valor − aportado); al restarle la custodia de Fidelity acumulada sale el «Resultado neto», el mismo importe y % del gráfico y de la tarjeta de rentabilidad. «Diario» = variación del último día del histórico (${F.date(d.fecha_datos)}). Tendencia: NAV desde la compra.</p></div>
     </section>`;
   }
   function drawTable() {
@@ -282,7 +290,14 @@
         <td class="eurc" data-test="pl-eur">${signed(p.pl, (x) => F.eurSigned(x))}</td>
         <td class="wt" data-test="peso">${F.pct(p.peso)}</td>
         <td>${sparkSvg(p.spark)}</td></tr>`).join('') : '<tr class="empty-row"><td colspan="10">Ningún fondo coincide con la búsqueda.</td></tr>'}</tbody>
-      <tfoot><tr><th scope="row" class="first">Total ${list.length < d.posiciones.length ? '(filtrado)' : ''}</th><td></td><td></td><td></td><td>${F.eur(tot)}</td><td></td><td data-test="total-plp">${totInv ? signed(totPl / totInv, (x) => F.pctSigned(x)) : ''}</td><td class="eurc" data-test="total-pl-eur">${signed(totPl, (x) => F.eurSigned(x))}</td><td>${F.pct(totW)}</td><td></td></tr></tfoot></table>`;
+      <tfoot>${(() => {
+        const full = list.length === d.posiciones.length, cu = d.resumen.custodia_acum || 0, net = d.resumen.pl;
+        const sub = `<tr${full ? ' class="tf-sub"' : ''}><th scope="row" class="first">${full ? 'Total fondos <small>valor − aportado</small>' : 'Total (filtrado)'}</th><td></td><td></td><td></td><td>${F.eur(tot)}</td><td></td><td data-test="${full ? 'sum-plp' : 'total-plp'}">${totInv ? signed(totPl / totInv, (x) => F.pctSigned(x)) : ''}</td><td class="eurc" data-test="${full ? 'sum-pl-eur' : 'total-pl-eur'}">${signed(totPl, (x) => F.eurSigned(x))}</td><td>${F.pct(totW)}</td><td></td></tr>`;
+        if (!full) return sub;
+        // v12: total neto = suma por fondo − custodia de Fidelity acumulada = rentab_neta_eur (gráfico y tarjeta)
+        return sub + `<tr class="tf-cus"><th scope="row" class="first">Custodia Fidelity <small>acumulada, aún no cobrada</small></th><td></td><td></td><td></td><td></td><td></td><td></td><td class="eurc" data-test="custodia-eur">${signed(-cu, (x) => F.eurSigned(x))}</td><td></td><td></td></tr>`
+          + `<tr class="tf-net"><th scope="row" class="first">Resultado neto <small>= gráfico</small></th><td></td><td></td><td></td><td></td><td></td><td data-test="total-plp">${signed(d.resumen.plp, (x) => F.pctSigned(x))}</td><td class="eurc" data-test="total-pl-eur">${signed(net, (x) => F.eurSigned(x))}</td><td></td><td></td></tr>`;
+      })()}</tfoot></table>`;
   }
   function label(k) { const s = k.replace(/_/g, ' '); return s.charAt(0).toUpperCase() + s.slice(1); }
   function openSheet(id) {
@@ -317,7 +332,7 @@
     const shortH = `<p class="fine">Historial corto (${r.n_rentabilidades} días): dato orientativo.</p>`;
     const T = {
       neto: ['Rentabilidad neta', 'Neta', `<p>Dinero ganado o perdido sobre lo aportado: <b>valor actual − custodia acumulada − aportado</b>.</p><p>El valor de cada fondo ya descuenta sus gastos (TER) y además se resta la custodia de Renta 4 del fondo indexado (${F.eur(d.resumen.custodia_acum)} hasta ahora). El porcentaje es sobre lo aportado (${F.eur(d.resumen.invertido)}).</p><p>No hay rentabilidad objetivo definida, así que no se muestra ninguna barra de objetivo.</p>`],
-      twr: ['Cómo leer el gráfico y los periodos', 'TWR y ganancia', `<p><b>Gráfico</b>: la línea discontinua es el <b>capital aportado</b> y la línea azul es la cartera. Cuando la cartera vale más que lo aportado, la línea azul va <b>por encima</b> (zona verde); cuando vale menos, <b>por debajo</b> (zona roja). El % es la ganancia ÷ lo aportado. En 1 día, 1 semana y 1 mes la base es el valor al inicio del periodo más lo aportado después. Los puntos verdes marcan las dos aportaciones: ${d.inicios.map((m) => `${esc(m.plataforma)} el ${F.date(m.f_aportacion)} (${F.eur(m.importe)})`).join(' y ')}. Los escalones de la línea discontinua están en las fechas de compra de los fondos, que es cuando el dinero empezó a invertirse.</p><p><b>Ganancia €</b>: valor − aportado. En los periodos: valor final − valor inicial − aportaciones del periodo; el % es ese importe ÷ (valor inicial + aportaciones). Desde el inicio: ${F.eurSigned(d.resumen.valor - d.resumen.invertido)} (${F.pctSigned(d.resumen.valor / d.resumen.invertido - 1)}); tras la custodia pendiente, ${F.eurSigned(d.resumen.pl)}.</p><p><b>Rentabilidad TWR</b> (en el tooltip y junto al importe): rentabilidad <b>ponderada por tiempo</b>, lo que ha hecho el dinero sin que influyan las aportaciones. Desde el inicio: ${F.pctSigned(d.resumen.twr)} (anualizada ${F.pctSigned(d.resumen.twr_anual)}). Es la base de las métricas de riesgo.</p><p><b>YTD</b>: en lo que va de año (desde el 01/01, o desde el inicio si la cartera empezó este año).</p><p>¿Por qué la TWR (${F.pctSigned(d.resumen.twr)}) es más negativa que la ganancia sobre lo aportado (${F.pctSigned(d.resumen.valor / d.resumen.invertido - 1)})? La TWR da el mismo peso a cada día: en las primeras semanas solo había una parte del dinero y cayó; en euros esa caída pesó poco.</p>`],
+      twr: ['Cómo leer el gráfico y los periodos', 'TWR y ganancia', `<p><b>Gráfico</b>: la línea discontinua es el <b>capital aportado</b> y la línea azul es la cartera. Cuando el resultado neto es positivo, la línea azul va <b>por encima</b> (zona verde); cuando es negativo, <b>por debajo</b> (zona roja). El % es el <b>resultado neto ÷ lo aportado</b>, con la custodia de Fidelity ya restada: la misma cifra que la tarjeta «Rentabilidad neta». En 1 día, 1 semana y 1 mes la base es el valor neto al inicio del periodo más lo aportado después. Los puntos verdes marcan las dos aportaciones: ${d.inicios.map((m) => `${esc(m.plataforma)} el ${F.date(m.f_aportacion)} (${F.eur(m.importe)})`).join(' y ')}. Los escalones de la línea discontinua están en las fechas de compra de los fondos, que es cuando el dinero empezó a invertirse.</p><p><b>Ganancia / pérdida €</b> (resultado neto): valor − custodia de Fidelity acumulada − aportado, el mismo dato que da Cartera Family (rentab_neta_eur). En los periodos: valor neto final − valor neto inicial − aportaciones del periodo; el % es ese importe ÷ (valor neto inicial + aportaciones). Desde el inicio: ${F.eurSigned(d.resumen.pl)} (${F.pctSigned(d.resumen.plp)}); sin restar la custodia (${F.eur(d.resumen.custodia_acum)}) serían ${F.eurSigned(d.resumen.valor - d.resumen.invertido)}.</p><p><b>Rentabilidad TWR</b> (en el tooltip y junto al importe): rentabilidad <b>ponderada por tiempo</b>, lo que ha hecho el dinero sin que influyan las aportaciones. Desde el inicio: ${F.pctSigned(d.resumen.twr)} (anualizada ${F.pctSigned(d.resumen.twr_anual)}). Es la base de las métricas de riesgo.</p><p><b>YTD</b>: en lo que va de año (desde el 01/01, o desde el inicio si la cartera empezó este año).</p><p>¿Por qué la TWR (${F.pctSigned(d.resumen.twr)}) es más negativa que el resultado neto sobre lo aportado (${F.pctSigned(d.resumen.plp)})? La TWR da el mismo peso a cada día: en las primeras semanas solo había una parte del dinero y cayó; en euros esa caída pesó poco.</p>`],
       vol: ['Volatilidad', 'σ ann', `<p>Cuánto oscila la cartera de un día para otro, llevado a un año. A más volatilidad, más vaivenes por el camino.</p><p>${F.pct(r.volatilidad)} es baja: más de la mitad de la cartera está en monetario y renta fija. La bolsa mundial suele moverse entre el 12 % y el 20 %.</p><p class="fine">Desviación típica de las rentabilidades diarias TWR × √252. Coincide con Cartera Family (${F.num(r.volatilidad_fuente_pct, 2)} %).</p>`],
       sharpe: ['Ratio de Sharpe', 'SR', `<p>Rentabilidad <b>por encima del tipo sin riesgo</b> por cada unidad de riesgo. Por encima de 1 se considera bueno; negativo significa que en este periodo habría rendido más dejar el dinero al tipo sin riesgo.</p><p>Tipo sin riesgo: <b>${esc(lr.nombre)}</b>, media ${F.num(lr.medio_pct, 3)} % del ${F.date(lr.desde)} al ${F.date(lr.hasta)} (habría rendido ${F.pctSigned(r.rf_total)} en el periodo).</p><p class="fine">Media diaria de (rentabilidad − €STR) / desviación típica de esos excesos × √252. Fuente: <a href="${esc(lr.web)}" target="_blank" rel="noopener">BCE, serie ${esc(lr.serie)}</a>.</p>${shortH}`],
       sortino: ['Ratio de Sortino', 'Sortino', `<p>Como el Sharpe, pero <b>solo penaliza las caídas</b>: la volatilidad de los días en que la cartera rinde menos que el €STR. Los días buenos no cuentan como «riesgo».</p><p>${F.num(r.sortino, 2)}: negativo porque en el periodo la cartera ha rendido menos que el €STR.</p><p class="fine">Exceso medio anualizado / desviación a la baja anualizada (objetivo = €STR).</p>${shortH}`],

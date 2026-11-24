@@ -277,7 +277,7 @@ p.big { margin: 4px 0 0; }
 .chart .points .pt-l2 { fill: var(--text2); font: 600 10px var(--mono); }
 .chart .dot.inv { stroke: #aab2c0; }
 .lsw.inv { border-top: 2px dashed #aab2c0; }
-.lsw.gain, .lsw.val { border-top-color: transparent; }
+.lsw.gain, .lsw.val, .lsw.cus { border-top-color: transparent; }
 .tip { gap: 3px; }
 .tip b.pos { color: var(--green-t); } .tip b.neg { color: var(--red-t); }
 .tip-ini { color: #6ee7b7; border-top: 1px solid #1f2633; padding-top: 4px; margin-top: 2px; display: block; }
@@ -318,3 +318,7 @@ p.big { margin: 4px 0 0; }
 .ftable thead th .thsub { display: block; font: 400 9px var(--mono); letter-spacing: .04em; text-transform: none; color: var(--dim); margin-top: 3px; }
 .ftable td .navd { display: block; font-size: 9.5px; color: var(--amber-t); margin-top: 2px; }
 .ftable thead th.wrap { white-space: normal; min-width: 92px; line-height: 1.35; }
+/* v12: pie de la tabla con suma por fondo, custodia de Fidelity y resultado neto (= gráfico) */
+.ftable tfoot tr.tf-sub th, .ftable tfoot tr.tf-sub td, .ftable tfoot tr.tf-cus th, .ftable tfoot tr.tf-cus td { font-weight: 500; color: var(--muted, #9ca3af); }
+.ftable tfoot tr.tf-net th, .ftable tfoot tr.tf-net td { border-top: 1px solid rgba(255,255,255,.14); }
+.ftable tfoot th small { display: block; font-weight: 400; font-size: 10.5px; opacity: .75; }
