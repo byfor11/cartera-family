@@ -77,7 +77,10 @@
   function change(s, b, e) {
     const i0 = b >= 0 ? s[b].i : 0, flows = s[e].i - i0;
     const eur = netPl(s[e]) - (b >= 0 ? netPl(s[b]) : 0); const den = (b >= 0 ? netV(s[b]) : 0) + flows;
-    return { eur: Math.round(eur * 100) / 100, pct: den ? eur / den : 0, flows };
+    // Desde el inicio: el % es el de la fuente (rentab_neta_pct), la misma cifra que la tarjeta; € / aportado
+    // puede redondear distinto en el segundo decimal (p. ej. −1,745 % → −1,75 %, no −1,74 %).
+    const pct = (b < 0 && s[e].plp != null) ? s[e].plp / 100 : (den ? eur / den : 0);
+    return { eur: Math.round(eur * 100) / 100, pct, flows };
   }
 
   /* ---------- Curva ---------- */
